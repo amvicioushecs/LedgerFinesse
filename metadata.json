@@ -1,0 +1,6 @@
+{
+  "name": "LedgerFinesse — Find Questionable Rent Charges & Audit Your Lease",
+  "description": "LedgerFinesse visualizes historical rental ledgers side by side with renters lease agreements to uncover unauthorized fees, illegal late charges, and accounting discrepancies.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
