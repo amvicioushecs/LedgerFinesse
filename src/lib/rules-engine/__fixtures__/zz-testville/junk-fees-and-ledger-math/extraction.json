@@ -1,0 +1,24 @@
+{
+  "place": { "stateCode": "ZZ", "city": "Testville" },
+  "lease": {
+    "startDate": "2026-01-01",
+    "endDate": "2026-12-31",
+    "monthlyRentCents": 120000,
+    "dueDay": 1,
+    "gracePeriodDays": 5,
+    "lateFee": { "kind": "flat", "amountCents": 5000 },
+    "authorizedFees": [
+      { "name": "Technology Fee", "amountCents": 1500 },
+      { "name": "Convenience Fee", "amountCents": 300 }
+    ]
+  },
+  "openingBalanceCents": 0,
+  "ledger": [
+    { "id": "jan-rent", "sequence": 0, "date": "2026-01-01", "description": "Monthly Rent", "kind": "charge", "category": "rent", "amountCents": 120000, "reportedBalanceCents": 120000, "confidence": 1 },
+    { "id": "jan-tech", "sequence": 1, "date": "2026-01-01", "description": "Tech Fee", "kind": "charge", "category": "fee", "amountCents": 2000, "reportedBalanceCents": 122000, "confidence": 1 },
+    { "id": "jan-conv", "sequence": 2, "date": "2026-01-01", "description": "Online Convenience Fee", "kind": "charge", "category": "fee", "amountCents": 300, "reportedBalanceCents": 122300, "confidence": 1 },
+    { "id": "jan-pool", "sequence": 3, "date": "2026-01-02", "description": "Pool Key Fee", "kind": "charge", "category": "fee", "amountCents": 2500, "reportedBalanceCents": 124800, "confidence": 0.9 },
+    { "id": "jan-pay", "sequence": 4, "date": "2026-01-03", "description": "ACH Payment", "kind": "payment", "category": "payment", "amountCents": 124800, "reportedBalanceCents": 1000, "confidence": 1 },
+    { "id": "feb-rent", "sequence": 5, "date": "2026-02-01", "description": "Monthly Rent", "kind": "charge", "category": "rent", "amountCents": 120000, "reportedBalanceCents": 121000, "confidence": 1 }
+  ]
+}

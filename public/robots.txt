@@ -1,0 +1,95 @@
+# robots.txt for LedgerFinesse (PLACEHOLDER domain: ledgerfinesse.com)
+# Public marketing, rights and guide pages are open to search and AI crawlers.
+# The app, admin, auth and API are private (also protected by login and noindex).
+
+User-agent: GPTBot
+Allow: /
+Disallow: /app
+Disallow: /admin
+Disallow: /api
+Disallow: /auth
+Disallow: /login
+Disallow: /signup
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /app
+Disallow: /admin
+Disallow: /api
+Disallow: /auth
+Disallow: /login
+Disallow: /signup
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /app
+Disallow: /admin
+Disallow: /api
+Disallow: /auth
+Disallow: /login
+Disallow: /signup
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /app
+Disallow: /admin
+Disallow: /api
+Disallow: /auth
+Disallow: /login
+Disallow: /signup
+
+User-agent: Claude-SearchBot
+Allow: /
+Disallow: /app
+Disallow: /admin
+Disallow: /api
+Disallow: /auth
+Disallow: /login
+Disallow: /signup
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /app
+Disallow: /admin
+Disallow: /api
+Disallow: /auth
+Disallow: /login
+Disallow: /signup
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /app
+Disallow: /admin
+Disallow: /api
+Disallow: /auth
+Disallow: /login
+Disallow: /signup
+
+User-agent: Applebot-Extended
+Allow: /
+Disallow: /app
+Disallow: /admin
+Disallow: /api
+Disallow: /auth
+Disallow: /login
+Disallow: /signup
+
+User-agent: Bingbot
+Allow: /
+Disallow: /app
+Disallow: /admin
+Disallow: /api
+Disallow: /auth
+Disallow: /login
+Disallow: /signup
+
+User-agent: *
+Allow: /
+Disallow: /app
+Disallow: /admin
+Disallow: /api
+Disallow: /auth
+Disallow: /login
+Disallow: /signup
+
+Sitemap: https://ledgerfinesse.com/sitemap.xml

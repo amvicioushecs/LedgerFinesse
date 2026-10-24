@@ -1,0 +1,20 @@
+{
+  "findings": [
+    {
+      "category": "late_fee_amount",
+      "ledgerLineId": "jan-late",
+      "date": "2026-01-10",
+      "amountCents": 5000,
+      "basis": "rule",
+      "ruleId": "zz-testville-late-fee-cap",
+      "ruleVersion": 1,
+      "citation": "Testville Fictional Ordinance § 5-1 (test fixture, not a real law)",
+      "sourceUrl": "https://example.com/testville-fictional-ordinance/5-1",
+      "confidence": 1
+    }
+  ],
+  "totalFoundCents": 5000,
+  "previewSummary": [
+    { "category": "late_fee_amount", "count": 1, "amountCents": 5000 }
+  ]
+}

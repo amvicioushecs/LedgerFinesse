@@ -1,0 +1,17 @@
+{
+  "place": { "stateCode": "ZZ", "city": "Testville" },
+  "lease": {
+    "startDate": "2026-01-01",
+    "endDate": "2026-12-31",
+    "monthlyRentCents": 150000,
+    "dueDay": 1,
+    "gracePeriodDays": 5,
+    "lateFee": { "kind": "flat", "amountCents": 7500 },
+    "authorizedFees": []
+  },
+  "openingBalanceCents": 0,
+  "ledger": [
+    { "id": "jan-rent", "sequence": 0, "date": "2026-01-01", "description": "Monthly Rent", "kind": "charge", "category": "rent", "amountCents": 150000, "reportedBalanceCents": null, "confidence": 1 },
+    { "id": "jan-late", "sequence": 1, "date": "2026-01-10", "description": "Late Charge", "kind": "charge", "category": "late_fee", "amountCents": 7500, "reportedBalanceCents": null, "confidence": 1 }
+  ]
+}

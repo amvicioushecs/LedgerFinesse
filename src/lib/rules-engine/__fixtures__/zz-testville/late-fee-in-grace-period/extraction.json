@@ -1,0 +1,21 @@
+{
+  "place": { "stateCode": "ZZ", "city": "Testville" },
+  "lease": {
+    "startDate": "2026-01-01",
+    "endDate": "2026-12-31",
+    "monthlyRentCents": 150000,
+    "dueDay": 1,
+    "gracePeriodDays": 5,
+    "lateFee": { "kind": "flat", "amountCents": 5000 },
+    "authorizedFees": []
+  },
+  "openingBalanceCents": 0,
+  "ledger": [
+    { "id": "jan-rent", "sequence": 0, "date": "2026-01-01", "description": "Monthly Rent", "kind": "charge", "category": "rent", "amountCents": 150000, "reportedBalanceCents": null, "confidence": 1 },
+    { "id": "jan-late", "sequence": 1, "date": "2026-01-04", "description": "Late Fee", "kind": "charge", "category": "late_fee", "amountCents": 5000, "reportedBalanceCents": null, "confidence": 1 },
+    { "id": "feb-rent", "sequence": 2, "date": "2026-02-01", "description": "Monthly Rent", "kind": "charge", "category": "rent", "amountCents": 150000, "reportedBalanceCents": null, "confidence": 1 },
+    { "id": "feb-late", "sequence": 3, "date": "2026-02-07", "description": "Late Fee", "kind": "charge", "category": "late_fee", "amountCents": 5000, "reportedBalanceCents": null, "confidence": 1 },
+    { "id": "mar-rent", "sequence": 4, "date": "2026-03-01", "description": "Monthly Rent", "kind": "charge", "category": "rent", "amountCents": 150000, "reportedBalanceCents": null, "confidence": 1 },
+    { "id": "mar-late", "sequence": 5, "date": "2026-03-06", "description": "Late Fee", "kind": "charge", "category": "late_fee", "amountCents": 5000, "reportedBalanceCents": null, "confidence": 1 }
+  ]
+}

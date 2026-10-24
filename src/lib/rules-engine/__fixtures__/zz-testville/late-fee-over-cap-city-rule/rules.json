@@ -1,0 +1,47 @@
+[
+  {
+    "id": "zz-state-late-fee-cap",
+    "ruleKey": "late_fee_cap",
+    "ruleType": "late_fee_cap",
+    "version": 1,
+    "place": { "stateCode": "ZZ", "city": null },
+    "status": "verified",
+    "citation": "ZZ Fictional Code § 10-2 (test fixture, not a real law)",
+    "sourceUrl": "https://example.com/zz-fictional-code/10-2",
+    "verifiedBy": "fixture-verifier",
+    "verifiedAt": "2026-10-24",
+    "effectiveFrom": "2020-01-01",
+    "effectiveTo": null,
+    "params": { "maxFlatCents": 4000, "maxPercentOfRentBps": null, "whenBoth": "lesser" }
+  },
+  {
+    "id": "zz-testville-late-fee-cap",
+    "ruleKey": "late_fee_cap",
+    "ruleType": "late_fee_cap",
+    "version": 1,
+    "place": { "stateCode": "ZZ", "city": "Testville" },
+    "status": "verified",
+    "citation": "Testville Fictional Ordinance § 5-1 (test fixture, not a real law)",
+    "sourceUrl": "https://example.com/testville-fictional-ordinance/5-1",
+    "verifiedBy": "fixture-verifier",
+    "verifiedAt": "2026-10-24",
+    "effectiveFrom": "2020-01-01",
+    "effectiveTo": null,
+    "params": { "maxFlatCents": 2500, "maxPercentOfRentBps": null, "whenBoth": "lesser" }
+  },
+  {
+    "id": "zz-testville-late-fee-cap-draft",
+    "ruleKey": "late_fee_cap",
+    "ruleType": "late_fee_cap",
+    "version": 2,
+    "place": { "stateCode": "ZZ", "city": "Testville" },
+    "status": "draft",
+    "citation": null,
+    "sourceUrl": null,
+    "verifiedBy": null,
+    "verifiedAt": null,
+    "effectiveFrom": "2020-01-01",
+    "effectiveTo": null,
+    "params": { "maxFlatCents": 1000, "maxPercentOfRentBps": null, "whenBoth": "lesser" }
+  }
+]
