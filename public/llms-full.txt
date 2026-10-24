@@ -1,0 +1,123 @@
+# LedgerFinesse: full text of key pages
+
+> LedgerFinesse is an online service for U.S. renters. It audits your lease and rent ledger for junk fees, unauthorized rent increases, late-fee and grace-period violations, and math errors, cites the state or city law that applies, and generates dispute and demand letters you send yourself. The audit and preview are free; you pay 25% of the overcharge found to unlock the full report and letters, and nothing if nothing is found. LedgerFinesse is not a law firm and does not give legal advice.
+
+Website: https://ledgerfinesse.com
+Support: support@ledgerfinesse.com
+Location: Online service for renters in the United States. No street address.
+
+---
+
+## How It Works
+URL: https://ledgerfinesse.com/how-it-works
+
+LedgerFinesse checks your lease and rent ledger for overcharges and writes the letters to dispute them. Here is how it works.
+
+1. Create an account. Sign in with your email (we send you a sign-in link) or with Google. An account keeps your documents private to you.
+2. Enter your rental address and landlord details. Your address tells us which state and city rules apply. Your landlord's or management company's name and mailing address go on your letters.
+3. Upload your lease and your rent ledger. Use PDFs or take photos with your phone. You can add, reorder and remove pages.
+4. Wait about a minute while we audit. We read your documents, compare every ledger charge to your lease, and check them against the law where you live. We email you (and text you, if you choose) when your results are ready. If a page is hard to read, we ask you to retake just that page.
+5. See your free preview. The preview shows the total overcharge we found and how many issues there are.
+6. Unlock the full report. Pay 25% of the overcharge found to unlock it. For example, if we find $576, you pay $144. If we find nothing, you pay nothing and we tell you your ledger looks clean.
+7. Download or print your letters. Your full report lists every issue, the amount, and the lease clause or law behind it. Your dispute and demand letters are ready to download or print. You review them and send them yourself.
+
+Moving out? Choose "I'm moving out" and upload your landlord's security-deposit itemization. We check the deductions and the return deadline, and add a deposit demand letter if something looks wrong.
+
+LedgerFinesse is a document tool, not a law firm, and does not provide legal advice.
+
+---
+
+## What We Audit
+URL: https://ledgerfinesse.com/what-we-audit
+
+LedgerFinesse compares your rent ledger to your lease and to the rules for your state and city. It looks for:
+
+- Junk fees: charges such as portal, technology, admin, convenience or processing fees that your lease doesn't authorize, or that the law where you live doesn't allow.
+- Unauthorized rent increases: rent charged above your lease amount, or increases without the notice your lease or local law requires.
+- Grace-period and late-fee violations: late fees charged before your grace period ended, late fees above your lease's limit or the legal limit, and late fees on months you paid on time.
+- Math errors: running balances that don't add up, carried-forward errors, and payments that weren't credited.
+- Duplicate charges: the same charge billed twice for the same period.
+- Move-out deposit deductions (optional): deductions and return deadlines for your security deposit, checked against your lease and local deposit rules.
+
+Every issue in your report shows the amount, the ledger line, the lease clause, and, where a law applies, the citation and a link to the official source. We only use rules that have been checked against the current law.
+
+Where we don't have rules for your city yet, we use your state's law. If we don't cover your state yet, you can join the waitlist and tell us which city you're in. We email you when it goes live, and you're not charged.
+
+---
+
+## Pricing
+URL: https://ledgerfinesse.com/pricing
+
+The audit and the preview are free. The preview shows the total overcharge we found.
+
+To unlock the full report and your letters, you pay 25% of the overcharge the audit finds, upfront, one time.
+
+Example: we find $576 in charges that look challengeable. You pay $144 to unlock the full report and letters.
+
+If the audit finds nothing, you pay nothing, and we tell you your ledger looks clean.
+
+Payment is handled by our checkout provider. We never see or store your card details.
+
+The fee is based on what the audit finds, not on what your landlord pays back. LedgerFinesse can't guarantee your landlord will refund or credit any amount.
+
+---
+
+## FAQ
+URL: https://ledgerfinesse.com/faq
+
+How much does LedgerFinesse cost?
+The audit and preview are free. To unlock the full report and letters, you pay 25% of the overcharge the audit finds, upfront. If it finds nothing, you pay nothing.
+
+What do I need to start?
+Your lease and your rent ledger (the list of charges and payments from your landlord or portal). PDFs and phone photos both work. You also need your rental address and your landlord's or management company's name and mailing address.
+
+Do I need an account?
+Yes. You sign in with your email or Google before uploading, so your documents stay private to you.
+
+How long does an audit take?
+Usually about a minute. We email you, and text you if you opted in, when it's ready. Some audits are double-checked by a person before the preview is shown; we email you when that's done.
+
+Which cities do you cover?
+We use city rules where we have them and state law everywhere else we cover. Each covered city and state has a renter-rights page with its rules and sources. If we don't cover your area yet, you can join the waitlist and tell us your city.
+
+Is LedgerFinesse a law firm? Is this legal advice?
+No. LedgerFinesse is a document tool, not a law firm, and does not give legal advice. You review and send your own letters. For advice about your situation, talk to a lawyer or a local legal aid organization.
+
+Do you contact my landlord for me?
+No. You send the letters yourself, by mail or email.
+
+Is my landlord's late fee legal?
+It depends on your lease and the law where you live. Many leases set a grace period and a late-fee amount, and some states and cities limit late fees. LedgerFinesse checks each late fee on your ledger against both.
+
+Can my landlord raise rent without notice?
+During a fixed-term lease, rent generally stays at the lease amount unless the lease allows a change. Notice rules for increases vary by state and city. LedgerFinesse flags rent charged above your lease amount and increases that don't meet the notice rules we have for your area.
+
+How do I get my security deposit back?
+Deposit rules vary by state, including how long your landlord has to return it or send an itemized list of deductions. Use the "I'm moving out" option to check your deductions and get a deposit demand letter.
+
+What happens to my documents?
+Your documents are stored privately, encrypted, and only you can see them. We use them only to run your audit. You can delete your account and all your files at any time. Uploaded files are deleted automatically after 12 months of inactivity.
+
+Do you use my documents to train AI?
+No. We send your documents only to an AI service under terms that don't allow training on them, and only to read the text for your audit. All the math and legal checks are done by our own rules engine.
+
+---
+
+## About
+URL: https://ledgerfinesse.com/about
+
+LedgerFinesse helps renters see what they were overcharged and act on it.
+
+Rent ledgers from property-management portals can be hard to read, and junk fees, quiet rent increases and early late fees are easy to miss. Hiring a lawyer to review a few hundred dollars of charges usually doesn't make sense. LedgerFinesse gives renters an affordable way to check every charge against their lease and local law, and the letters to dispute what's wrong.
+
+LedgerFinesse is a document tool, not a law firm. It doesn't give legal advice, represent renters, or contact landlords. Renters review and send their own letters.
+
+Every legal rule LedgerFinesse uses is checked against the official source before it goes live, and each renter-rights page shows when it was last checked.
+
+---
+
+## Contact
+URL: https://ledgerfinesse.com/contact
+
+Email: support@ledgerfinesse.com
+LedgerFinesse is an online service for U.S. renters and has no street address.

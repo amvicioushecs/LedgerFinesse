@@ -1,0 +1,36 @@
+# LedgerFinesse
+
+> LedgerFinesse is an online service for U.S. renters. It audits your lease and rent ledger for junk fees, unauthorized rent increases, late-fee and grace-period violations, and math errors, cites the state or city law that applies, and generates dispute and demand letters you send yourself. The audit and preview are free; you pay 25% of the overcharge found to unlock the full report and letters, and nothing if nothing is found. LedgerFinesse is not a law firm and does not give legal advice.
+
+LedgerFinesse is a mobile-friendly web app. Renters sign in, enter their rental address and landlord details, upload their lease and rent ledger (PDF or phone photos), and get results in about a minute. Coverage is by city and state; where there are no city rules, state law is used, and renters in areas not yet covered can join a waitlist at no charge.
+
+## Services
+
+- [How It Works](https://ledgerfinesse.com/how-it-works): The steps from sign-up to downloading your letters.
+- [What We Audit](https://ledgerfinesse.com/what-we-audit): Junk fees, unauthorized rent increases, grace-period and late-fee violations, math errors, duplicate charges, uncredited payments, and move-out deposit deductions.
+- [Renter Rights by City](https://ledgerfinesse.com/rights): Late-fee, grace-period, rent-increase and deposit rules for covered cities and states, each with its official source and the date it was last checked.
+
+## Pricing
+
+- [Pricing](https://ledgerfinesse.com/pricing): Free audit and preview. Pay 25% of the overcharge the audit finds, upfront, to unlock the full report and letters (example: $576 found, you pay $144). If nothing is found, you pay nothing.
+
+## FAQ
+
+- [FAQ](https://ledgerfinesse.com/faq): Cost, what documents you need, privacy, which cities are covered, and why LedgerFinesse is not legal advice.
+- [Late fee vs grace period](https://ledgerfinesse.com/guides/late-fee-vs-grace-period): What each term means and when a late fee can be charged.
+- [How to dispute rent ledger charges](https://ledgerfinesse.com/guides/dispute-rent-ledger-charges): Step-by-step guide to disputing charges on a rent ledger.
+
+## About
+
+- [About LedgerFinesse](https://ledgerfinesse.com/about): Who builds LedgerFinesse and why. LedgerFinesse is a document tool, not a law firm; renters review and send their own letters.
+
+## Contact
+
+- [Contact](https://ledgerfinesse.com/contact): Support by email at support@ledgerfinesse.com. LedgerFinesse is an online service with no street address.
+
+## Optional
+
+- [Full text of key pages](https://ledgerfinesse.com/llms-full.txt): How It Works, What We Audit, Pricing, FAQ and About in one plain-text file.
+- [Terms](https://ledgerfinesse.com/legal/terms): Terms of service.
+- [Privacy](https://ledgerfinesse.com/legal/privacy): How renter documents and data are handled.
+- [Disclaimer](https://ledgerfinesse.com/legal/disclaimer): Not legal advice.
