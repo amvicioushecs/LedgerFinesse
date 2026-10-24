@@ -3,8 +3,8 @@ import type { IsoDate, Place, Rule, RuleType } from "@/lib/rules-engine/types";
 
 /**
  * A rule is usable only when it is `verified` AND carries its evidence: citation,
- * https source URL, verifier and verification date (mirrors the DB constraint
- * `rules_verified_requires_evidence`). Draft and retired rules are never applied.
+ * https source URL, verifier and verification date. Draft and retired rules are
+ * never applied.
  */
 export function isVerified(rule: Rule): boolean {
   return (

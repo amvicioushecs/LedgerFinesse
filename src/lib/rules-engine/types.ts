@@ -56,7 +56,7 @@ export interface LeaseTerms {
   authorizedFees: { name: string; amountCents: number | null }[];
 }
 
-/** Normalized, renter-confirmed extraction. Produced by the extraction step (not in this plan). */
+/** Normalized, renter-confirmed extraction. Produced by the extraction step (not built yet). */
 export interface Extraction {
   place: Place;
   lease: LeaseTerms;
