@@ -1,6 +1,6 @@
 import { percentOfCents } from "@/lib/money";
 import { makeFinding } from "@/lib/rules-engine/finding";
-import { dayOfMonth } from "@/lib/rules-engine/ledger";
+import { lastGraceDay } from "@/lib/rules-engine/ledger";
 import { resolveRule } from "@/lib/rules-engine/rules";
 import type { Extraction, Finding, LateFeeCapRule, LedgerLine, Rule } from "@/lib/rules-engine/types";
 
@@ -18,14 +18,14 @@ function capFromRule(rule: LateFeeCapRule, monthlyRentCents: number): number | n
  *
  * 1. No late-fee clause in the lease -> the whole fee is unauthorized. There is no
  *    default cap (the prototype's hidden $50 default is intentionally gone).
- * 2. Timing: rent due on `dueDay` with `graceDays` is on time through day
- *    `dueDay + graceDays`. A late fee posted on or before that day is not owed.
+ * 2. Timing: rent is on time through the due date plus `graceDays` calendar days
+ *    (see {@link lastGraceDay}). A late fee posted on or before that day is not owed.
  *    graceDays = the longer of the lease grace period and a verified `grace_period`
  *    rule's `minDays` (law sets the floor). Amount: the full fee.
  * 3. Amount: the fee may not exceed the lease's late fee, nor a verified
  *    `late_fee_cap` rule's cap, whichever is lower. Amount: the excess.
  *
- * Assumes the late fee relates to rent due in the same calendar month it was posted.
+ * Assumes the late fee relates to the most recent rent due date on or before it was posted.
  *
  * @example dueDay 1, grace 5, fee posted on the 6th -> timing finding (full fee).
  * @example dueDay 1, grace 5, fee posted on the 7th -> no timing finding.
@@ -37,7 +37,7 @@ function checkLateFee(line: LedgerLine, extraction: Extraction, rules: readonly 
   const graceRule = resolveRule(rules, place, "grace_period", line.date);
   const ruleExtendsGrace = graceRule !== null && graceRule.params.minDays > lease.gracePeriodDays;
   const graceDays = ruleExtendsGrace ? graceRule.params.minDays : lease.gracePeriodDays;
-  if (dayOfMonth(line.date) <= lease.dueDay + graceDays) {
+  if (line.date <= lastGraceDay(line.date, lease.dueDay, graceDays)) {
     return makeFinding(line, "late_fee_timing", line.amountCents, ruleExtendsGrace ? graceRule : "lease");
   }
 

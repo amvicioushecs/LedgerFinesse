@@ -99,3 +99,28 @@ describe("checkLateFees: no late-fee clause (prototype regression)", () => {
     ]);
   });
 });
+
+describe("checkLateFees: grace periods across month ends", () => {
+  it("allows a fee for last month's rent once that grace period has ended (due 28th + 5 days = Feb 2)", () => {
+    const ext = extraction([lateFee("f", "2026-02-06", 5000)], { lease: lease({ dueDay: 28 }) });
+    expect(checkLateFees(ext, [])).toEqual([]);
+  });
+
+  it("flags a fee inside a grace period that runs into the next month", () => {
+    const ext = extraction([lateFee("f", "2026-02-02", 5000)], { lease: lease({ dueDay: 28 }) });
+    expect(checkLateFees(ext, [])[0]?.category).toBe("late_fee_timing");
+  });
+
+  it("uses the last day of a short month when the due day doesn't exist (due 31st, Feb has 28 days)", () => {
+    const terms = lease({ dueDay: 31, gracePeriodDays: 0 });
+    expect(checkLateFees(extraction([lateFee("f", "2026-02-28", 5000)], { lease: terms }), [])[0]?.category).toBe(
+      "late_fee_timing",
+    );
+    expect(checkLateFees(extraction([lateFee("f", "2026-03-01", 5000)], { lease: terms }), [])).toEqual([]);
+  });
+
+  it("treats a fee posted before this month's due day as belonging to last month's rent", () => {
+    const ext = extraction([lateFee("f", "2026-03-03", 5000)], { lease: lease({ dueDay: 5, gracePeriodDays: 3 }) });
+    expect(checkLateFees(ext, [])).toEqual([]);
+  });
+});

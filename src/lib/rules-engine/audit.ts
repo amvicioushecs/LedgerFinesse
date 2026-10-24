@@ -8,6 +8,11 @@ import type { AuditResult, Extraction, Finding, FindingCategory, PreviewSummaryI
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** A real calendar date written as YYYY-MM-DD (rejects 2026-02-30). */
+function isIsoDate(value: string): boolean {
+  return ISO_DATE.test(value) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+}
+
 /** Rejects malformed input instead of producing wrong money. */
 function validateExtraction(extraction: Extraction): void {
   const { lease } = extraction;
@@ -16,6 +21,8 @@ function validateExtraction(extraction: Extraction): void {
     throw new RangeError(`lease.dueDay must be 1-31, got ${lease.dueDay}`);
   }
   assertCents(lease.gracePeriodDays, "lease.gracePeriodDays");
+  if (!isIsoDate(lease.startDate)) throw new RangeError("lease.startDate must be YYYY-MM-DD");
+  if (lease.endDate !== null && !isIsoDate(lease.endDate)) throw new RangeError("lease.endDate must be YYYY-MM-DD");
   if (!Number.isSafeInteger(extraction.openingBalanceCents)) {
     throw new RangeError(`openingBalanceCents must be an integer, got ${extraction.openingBalanceCents}`);
   }
@@ -24,7 +31,7 @@ function validateExtraction(extraction: Extraction): void {
     if (line.reportedBalanceCents !== null && !Number.isSafeInteger(line.reportedBalanceCents)) {
       throw new RangeError(`ledger line ${line.id} reportedBalanceCents must be an integer`);
     }
-    if (!ISO_DATE.test(line.date)) throw new RangeError(`ledger line ${line.id} date must be YYYY-MM-DD`);
+    if (!isIsoDate(line.date)) throw new RangeError(`ledger line ${line.id} date must be YYYY-MM-DD`);
     if (!(line.confidence >= 0 && line.confidence <= 1)) {
       throw new RangeError(`ledger line ${line.id} confidence must be 0..1`);
     }

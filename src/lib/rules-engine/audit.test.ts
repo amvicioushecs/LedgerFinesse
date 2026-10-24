@@ -53,6 +53,7 @@ describe("audit", () => {
     ["fractional cents", { amountCents: 10.5 }],
     ["negative amount", { amountCents: -100 }],
     ["bad date", { date: "03/01/2026" }],
+    ["impossible calendar date", { date: "2026-02-30" }],
     ["confidence above 1", { confidence: 1.2 }],
   ])("rejects %s", (_label, overrides) => {
     const bad = line({ id: "bad", date: "2026-03-01", amountCents: 100, ...overrides });
@@ -70,8 +71,14 @@ describe("audit", () => {
     ["fractional grace period", { lease: lease({ gracePeriodDays: 2.5 }) }],
     ["negative rent", { lease: lease({ monthlyRentCents: -1 }) }],
     ["fractional opening balance", { openingBalanceCents: 1.5 }],
+    ["bad lease start date", { lease: lease({ startDate: "2026-1-1" }) }],
+    ["bad lease end date", { lease: lease({ endDate: "2026-13-01" }) }],
   ])("rejects %s", (_label, overrides) => {
     expect(() => audit(extraction([], overrides), [])).toThrow(RangeError);
+  });
+
+  it("accepts a month-to-month lease with no end date", () => {
+    expect(audit(extraction([], { lease: lease({ endDate: null }) }), []).totalFoundCents).toBe(0);
   });
 
   it("accepts a negative opening balance (a credit carried in)", () => {
