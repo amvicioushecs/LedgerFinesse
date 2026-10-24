@@ -1,0 +1,10 @@
+{
+  "findings": [
+    { "category": "late_fee_timing", "ledgerLineId": "jan-late", "date": "2026-01-04", "amountCents": 5000, "basis": "lease", "ruleId": null, "ruleVersion": null, "citation": null, "sourceUrl": null, "confidence": 1 },
+    { "category": "late_fee_timing", "ledgerLineId": "mar-late", "date": "2026-03-06", "amountCents": 5000, "basis": "lease", "ruleId": null, "ruleVersion": null, "citation": null, "sourceUrl": null, "confidence": 1 }
+  ],
+  "totalFoundCents": 10000,
+  "previewSummary": [
+    { "category": "late_fee_timing", "count": 2, "amountCents": 10000 }
+  ]
+}

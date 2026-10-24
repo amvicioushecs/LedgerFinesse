@@ -1,0 +1,9 @@
+{
+  "findings": [
+    { "category": "unauthorized_rent_increase", "ledgerLineId": "feb-rent", "date": "2026-02-01", "amountCents": 10000, "basis": "lease", "ruleId": null, "ruleVersion": null, "citation": null, "sourceUrl": null, "confidence": 1 }
+  ],
+  "totalFoundCents": 10000,
+  "previewSummary": [
+    { "category": "unauthorized_rent_increase", "count": 1, "amountCents": 10000 }
+  ]
+}

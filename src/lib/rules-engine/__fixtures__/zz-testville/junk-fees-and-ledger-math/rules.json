@@ -1,0 +1,17 @@
+[
+  {
+    "id": "zz-state-fee-ban",
+    "ruleKey": "fee_ban",
+    "ruleType": "fee_ban",
+    "version": 1,
+    "place": { "stateCode": "ZZ", "city": null },
+    "status": "verified",
+    "citation": "ZZ Fictional Code § 10-3 (test fixture, not a real law)",
+    "sourceUrl": "https://example.com/zz-fictional-code/10-3",
+    "verifiedBy": "fixture-verifier",
+    "verifiedAt": "2026-10-24",
+    "effectiveFrom": "2020-01-01",
+    "effectiveTo": null,
+    "params": { "feeNames": ["Convenience Fee"] }
+  }
+]
