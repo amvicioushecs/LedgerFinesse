@@ -1,0 +1,25 @@
+# dependencies
+/node_modules
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# cloudflare / opennext
+/.open-next/
+/.wrangler/
+.dev.vars*
+
+# env files: never commit real values
+.env*
+!.env.example
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
