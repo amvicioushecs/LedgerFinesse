@@ -34,9 +34,9 @@ export function SiteHeader({ locale }: { locale: Locale }) {
   return (
     <header className="no-print sticky top-0 z-40 border-b border-line bg-white/95 backdrop-blur">
       <div aria-hidden className="h-[3px] bg-[linear-gradient(90deg,var(--color-gold)_0%,var(--color-gold)_25%,var(--color-forest-deep)_25%)]" />
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-6">
         <Logo href={`/${locale}`} />
-        <div className="flex items-center gap-3 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           <Link href={`/${locale}/blog`} className="tap-target hidden text-sm font-semibold text-ink underline-offset-4 hover:underline md:inline-flex">
             {t.nav.blog}
           </Link>

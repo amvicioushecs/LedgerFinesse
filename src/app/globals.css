@@ -94,6 +94,11 @@ body {
 }
 header .tap-target {
   margin-block: -12px;
+  /* Don't add extra inline padding in the tight header row; min 44px still applies. */
+  padding-inline: 0;
+}
+header [data-testid="language-switcher"] .tap-target {
+  padding-inline: 12px;
 }
 
 /* Standalone markdown/source links that are not running text (Design Desk 44px hit area). */
