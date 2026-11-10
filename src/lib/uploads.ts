@@ -1,6 +1,11 @@
 /** Server-side upload checks: size cap and magic-byte sniffing (the browser's declared type is ignored). */
 
 export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+/**
+ * Lease + ledger together. Both go inline in one model request (base64 plus JSON roughly triples the
+ * memory), and a Worker isolate has 128 MB: 30 MB of uploads measured ~126 MB before fetch copies the body.
+ */
+export const MAX_SCAN_BYTES = 15 * 1024 * 1024;
 
 export type AllowedMime = "application/pdf" | "image/jpeg" | "image/png" | "image/webp";
 

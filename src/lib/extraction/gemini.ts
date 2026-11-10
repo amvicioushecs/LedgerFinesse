@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Extractor } from "@/lib/audits/types";
 import { getJurisdiction } from "@/lib/jurisdictions";
 import type { Extraction, Place } from "@/lib/rules-engine/types";
+import { MAX_SCAN_BYTES } from "@/lib/uploads";
 
 /**
  * Gemini reads the lease and ledger into structured data only. It never decides what is owed:
@@ -89,6 +90,9 @@ export function createGeminiExtractor(
   return {
     source: "model",
     async extract({ jurisdiction, documents }) {
+      if (documents.reduce((sum, d) => sum + d.bytes.byteLength, 0) > MAX_SCAN_BYTES) {
+        throw new Error("Documents too large for one extraction request");
+      }
       const j = getJurisdiction(jurisdiction);
       const parts = [
         { text: PROMPT },

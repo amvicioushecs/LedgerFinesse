@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAX_UPLOAD_REQUEST_BYTES, readUploadRequest } from "@/lib/audits/upload-request";
+import { MAX_SCAN_BYTES } from "@/lib/uploads";
 import { MAX_UPLOAD_BYTES } from "@/lib/uploads";
 
 const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37, 0, 0, 0, 0]);
@@ -56,6 +57,18 @@ describe("readUploadRequest", () => {
     const request = formRequest(form, { "content-length": "2000" });
     const read = vi.spyOn(File.prototype, "arrayBuffer");
     expect(await readUploadRequest(request)).toEqual({ ok: false, status: 413, error: "size", bodyRead: true });
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it("caps both files together at 15 MB (one inline model request inside a 128 MB Worker)", async () => {
+    expect(MAX_SCAN_BYTES).toBe(15 * 1024 * 1024);
+    expect(MAX_UPLOAD_REQUEST_BYTES).toBeLessThan(MAX_SCAN_BYTES + 128 * 1024);
+    const form = goodForm();
+    const half = Math.floor(MAX_SCAN_BYTES / 2) + 1;
+    form.set("lease", new File([new Uint8Array(half)], "a.pdf", { type: "application/pdf" }));
+    form.set("ledger", new File([new Uint8Array(half)], "b.png", { type: "image/png" }));
+    const read = vi.spyOn(File.prototype, "arrayBuffer");
+    expect(await readUploadRequest(formRequest(form, { "content-length": "2000" }))).toEqual({ ok: false, status: 413, error: "size", bodyRead: true });
     expect(read).not.toHaveBeenCalled();
   });
 

@@ -5,7 +5,7 @@ import { getDictionary } from "@/content/dictionaries";
 import { Disclaimer } from "@/components/disclaimer";
 import { UploadForm } from "@/components/audit/upload-form";
 import { serverEnv } from "@/lib/env";
-import { MAX_UPLOAD_BYTES } from "@/lib/uploads";
+import { MAX_SCAN_BYTES, MAX_UPLOAD_BYTES } from "@/lib/uploads";
 import { JURISDICTION_KEYS, getJurisdiction } from "@/lib/jurisdictions";
 import type { Locale } from "@/lib/i18n/locales";
 import { currentLocale } from "@/lib/i18n/server";
@@ -47,6 +47,7 @@ async function Upload({ locale, searchParams }: { locale: Locale; searchParams: 
             locale={locale}
             labels={{ ...t.upload }}
             maxFileBytes={MAX_UPLOAD_BYTES}
+            maxTotalBytes={MAX_SCAN_BYTES}
             jurisdictions={JURISDICTION_KEYS.map((key) => ({ key, label: getJurisdiction(key).label }))}
           />
         </div>

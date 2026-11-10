@@ -1,10 +1,10 @@
 import type { DocKind } from "@/lib/audits/types";
 import { isLocale, type Locale } from "@/lib/i18n/locales";
 import { isJurisdictionKey, type JurisdictionKey } from "@/lib/jurisdictions";
-import { MAX_UPLOAD_BYTES, validateUpload } from "@/lib/uploads";
+import { MAX_SCAN_BYTES, MAX_UPLOAD_BYTES, validateUpload } from "@/lib/uploads";
 
-/** Two files at the per-file cap plus room for the text fields and multipart boundaries. */
-export const MAX_UPLOAD_REQUEST_BYTES = 2 * MAX_UPLOAD_BYTES + 64 * 1024;
+/** Both files at the combined cap plus room for the text fields and multipart boundaries. */
+export const MAX_UPLOAD_REQUEST_BYTES = MAX_SCAN_BYTES + 64 * 1024;
 
 export type UploadError = "missing" | "size" | "type" | "generic";
 
@@ -51,6 +51,7 @@ export async function readUploadRequest(request: Request): Promise<{ ok: true; f
     if (file.size > MAX_UPLOAD_BYTES) return { ok: false, status: 413, error: "size", bodyRead: true };
     entries.push({ kind, file });
   }
+  if (entries.reduce((sum, e) => sum + e.file.size, 0) > MAX_SCAN_BYTES) return { ok: false, status: 413, error: "size", bodyRead: true };
 
   const files: UploadForm["files"] = [];
   for (const { kind, file } of entries) {

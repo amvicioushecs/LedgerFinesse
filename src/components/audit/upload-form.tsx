@@ -54,11 +54,13 @@ export function UploadForm({
   labels,
   jurisdictions,
   maxFileBytes,
+  maxTotalBytes,
 }: {
   locale: string;
   labels: Labels;
   jurisdictions: { key: string; label: string }[];
   maxFileBytes: number;
+  maxTotalBytes: number;
 }) {
   const [files, setFiles] = useState<{ ledger: string | null; lease: string | null }>({ ledger: null, lease: null });
   const [busy, setBusy] = useState(false);
@@ -73,7 +75,8 @@ export function UploadForm({
       onSubmit={(e) => {
         // The server enforces the same limit; this just saves uploading a file it will refuse.
         const picked = ["ledger", "lease"].map((n) => (e.currentTarget.elements.namedItem(n) as HTMLInputElement | null)?.files?.[0]);
-        if (picked.some((f) => f !== undefined && f.size > maxFileBytes)) {
+        const sizes = picked.map((f) => f?.size ?? 0);
+        if (sizes.some((size) => size > maxFileBytes) || sizes.reduce((a, b) => a + b, 0) > maxTotalBytes) {
           e.preventDefault();
           setTooLarge(true);
           return;

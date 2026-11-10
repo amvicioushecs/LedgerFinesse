@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MAX_SCAN_BYTES } from "@/lib/uploads";
 import { GEMINI_TIMEOUT_MS, createGeminiExtractor, parseModelExtraction } from "@/lib/extraction/gemini";
 
 const modelJson = {
@@ -60,6 +61,26 @@ describe("createGeminiExtractor", () => {
     const extractor = createGeminiExtractor({ apiKey: "k", model: "m", timeoutMs: 20 }, fetchImpl);
     await expect(extractor.extract({ jurisdiction: "austin-tx", documents: [] })).rejects.toThrow(/timed out|abort/i);
     expect(signal?.aborted).toBe(true);
+  });
+
+  it("refuses documents over the combined scan cap without calling the model", async () => {
+    let called = false;
+    const fetchImpl: typeof fetch = async () => {
+      called = true;
+      return new Response("{}");
+    };
+    const half = new Uint8Array(Math.floor(MAX_SCAN_BYTES / 2) + 1);
+    const extractor = createGeminiExtractor({ apiKey: "k", model: "m" }, fetchImpl);
+    await expect(
+      extractor.extract({
+        jurisdiction: "austin-tx",
+        documents: [
+          { kind: "lease", mimeType: "application/pdf", bytes: half },
+          { kind: "ledger", mimeType: "image/png", bytes: half },
+        ],
+      }),
+    ).rejects.toThrow(/too large/);
+    expect(called).toBe(false);
   });
 
   it("uses a 60 second timeout by default", () => {
