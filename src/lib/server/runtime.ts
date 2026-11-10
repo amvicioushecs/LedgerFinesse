@@ -11,7 +11,7 @@ import {
 } from "@/lib/auth/callback";
 import { DEV_SESSION_COOKIE, signDevSession, verifyDevSession } from "@/lib/auth/dev-session";
 import { MemoryPasswordProvider } from "@/lib/auth/memory-password";
-import type { PasswordAuthProvider } from "@/lib/auth/password";
+import { mayChangePassword, type AuthMethod, type PasswordAuthProvider } from "@/lib/auth/password";
 import { SupabasePasswordProvider } from "@/lib/auth/supabase-password";
 import { serverEnv, type ServerEnv } from "@/lib/env";
 import { demoExtractor } from "@/lib/extraction/demo";
@@ -142,12 +142,33 @@ export function recoveryConfirmDeps(): RecoveryConfirmDeps {
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   const env = serverEnv();
   if (env.backend === "memory") {
-    const token = (await cookies()).get(DEV_SESSION_COOKIE)?.value;
-    return verifyDevSession(token, devSecret(env));
+    const session = await verifyDevSession((await cookies()).get(DEV_SESSION_COOKIE)?.value, devSecret(env));
+    return session ? { id: session.id, email: session.email } : null;
   }
   const supabase = await supabaseForRequest(env);
   const { data } = await supabase.auth.getUser();
   return data.user ? { id: data.user.id, email: data.user.email ?? null } : null;
+}
+
+/**
+ * Whether this session may set a new password: a recovery session (reset link) or a recent sign-in, from the
+ * verified JWT's `amr` claim (dev sessions carry a signed sign-in time).
+ */
+export async function passwordChangeAllowed(): Promise<boolean> {
+  const env = serverEnv();
+  const now = Math.floor(Date.now() / 1000);
+  let methods: AuthMethod[] = [];
+  if (env.backend === "memory") {
+    const session = await verifyDevSession((await cookies()).get(DEV_SESSION_COOKIE)?.value, devSecret(env));
+    methods = session ? [{ method: "password", at: session.signedInAt }] : [];
+  } else {
+    const { data, error } = await (await supabaseForRequest(env)).auth.getClaims();
+    const amr = error ? [] : ((data?.claims.amr ?? []) as unknown[]);
+    methods = amr.flatMap((m) =>
+      typeof m === "object" && m && "method" in m && "timestamp" in m ? [{ method: String(m.method), at: Number(m.timestamp) }]
+      : m === "recovery" ? [{ method: "recovery", at: 0 }] : []);
+  }
+  return mayChangePassword(methods, now, env.passwordChangeRecentSeconds);
 }
 
 export type SignInResult = { kind: "email_sent" } | { kind: "signed_in" } | { kind: "error" };

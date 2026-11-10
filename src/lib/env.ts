@@ -23,6 +23,8 @@ export interface ServerEnv {
   rateLimits: RateLimits;
   /** Loose per-IP limit; applies only with trustedIpHeader. */
   ipRateLimit: RateLimit;
+  /** A password change needs a recovery session or a sign-in this recent. */
+  passwordChangeRecentSeconds: number;
   /** Wrong passwords allowed per sign-in email per window. */
   passwordFailureLimit: RateLimit;
   /** Lower-case header name the host sets with the client IP; null (default) turns per-IP limits off. */
@@ -112,6 +114,8 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     checkout: parseLimit("LF_RATE_LIMIT_CHECKOUT", raw.LF_RATE_LIMIT_CHECKOUT, DEFAULT_RATE_LIMITS.checkout),
   };
   const ipRateLimit = parseLimit("LF_RATE_LIMIT_IP", raw.LF_RATE_LIMIT_IP, DEFAULT_IP_RATE_LIMIT);
+  const recentMinutes = Number(raw.LF_PASSWORD_CHANGE_RECENT_MINUTES?.trim() || "10");
+  if (!Number.isSafeInteger(recentMinutes) || recentMinutes < 1) errors.push("LF_PASSWORD_CHANGE_RECENT_MINUTES must be a positive integer");
   const passwordFailureLimit = parseLimit("LF_PASSWORD_FAILURE_LIMIT", raw.LF_PASSWORD_FAILURE_LIMIT, DEFAULT_PASSWORD_FAILURE_LIMIT);
   const trustedIpHeader = raw.LF_TRUSTED_IP_HEADER?.trim().toLowerCase() || null;
   if (trustedIpHeader && !/^[a-z0-9-]+$/.test(trustedIpHeader)) errors.push("LF_TRUSTED_IP_HEADER must be a header name, e.g. x-real-ip");
@@ -131,6 +135,7 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     rateLimits,
     ipRateLimit,
     passwordFailureLimit,
+    passwordChangeRecentSeconds: recentMinutes * 60,
     trustedIpHeader,
   };
 }

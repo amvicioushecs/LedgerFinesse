@@ -25,19 +25,20 @@ export async function devUserId(email: string): Promise<string> {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
-export async function signDevSession(email: string, secret: string): Promise<string> {
-  const payload = btoa(email.trim().toLowerCase());
-  return `${payload}.${await hmac(secret, payload)}`;
+/** `signedInAt` (unix seconds) is signed too: password changes need a recent sign-in. */
+export async function signDevSession(email: string, secret: string, signedInAt = Math.floor(Date.now() / 1000)): Promise<string> {
+  const body = `${btoa(email.trim().toLowerCase())}.${signedInAt}`;
+  return `${body}.${await hmac(secret, body)}`;
 }
 
-export async function verifyDevSession(token: string | undefined, secret: string): Promise<{ id: string; email: string } | null> {
-  const [payload, sig] = token?.split(".") ?? [];
-  if (!payload || !sig || !timingSafeEqual(sig, await hmac(secret, payload))) return null;
+export async function verifyDevSession(token: string | undefined, secret: string): Promise<{ id: string; email: string; signedInAt: number } | null> {
+  const [payload, at, sig] = token?.split(".") ?? [];
+  if (!payload || !at || !sig || !/^\d+$/.test(at) || !timingSafeEqual(sig, await hmac(secret, `${payload}.${at}`))) return null;
   let email: string;
   try {
     email = atob(payload);
   } catch {
     return null;
   }
-  return { id: await devUserId(email), email };
+  return { id: await devUserId(email), email, signedInAt: Number(at) };
 }

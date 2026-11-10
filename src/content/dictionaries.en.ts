@@ -124,6 +124,7 @@ export const en = {
       save: "Save new password",
       updateError: "We couldn't save your password. Request a new reset link and try again.",
       locked: "Too many wrong passwords for this email. Try again in 15 minutes, or use the email link or reset your password.",
+      reauth: "For your security, sign in again to change your password.",
       confirmTitle: "Reset the password for this account?",
       confirmBody: "This reset link is for {email}. Continue only if that is your account.",
       confirmContinue: "Continue as {email}",

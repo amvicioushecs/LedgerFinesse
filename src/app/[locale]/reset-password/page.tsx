@@ -5,7 +5,7 @@ import { fill, getDictionary } from "@/content/dictionaries";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/lib/auth/password";
 import { currentLocale } from "@/lib/i18n/server";
 import type { Locale } from "@/lib/i18n/locales";
-import { getCurrentUser } from "@/lib/server/runtime";
+import { getCurrentUser, passwordChangeAllowed } from "@/lib/server/runtime";
 import { PRIVATE_ROBOTS } from "@/lib/seo";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -17,6 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
 async function ResetForm({ locale, searchParams }: { locale: Locale; searchParams: PageProps<"/[locale]/reset-password">["searchParams"] }) {
   const p = getDictionary(locale).signup.password;
   if (!(await getCurrentUser())) redirect(`/${locale}/signin?status=expired`);
+  if (!(await passwordChangeAllowed())) redirect(`/${locale}/signin?status=reauth&next=${encodeURIComponent(`/${locale}/reset-password`)}`);
   const status = (await searchParams).status;
   return (
     <form action="/auth/update-password" method="post" className="space-y-4">

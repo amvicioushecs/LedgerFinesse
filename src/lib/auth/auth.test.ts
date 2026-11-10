@@ -37,8 +37,9 @@ describe("safeNextPath", () => {
 
 describe("dev session", () => {
   it("round-trips a signed email and rejects tampering", async () => {
-    const token = await signDevSession("Renter@Example.com", "secret");
-    expect(await verifyDevSession(token, "secret")).toEqual({ id: await devUserId("renter@example.com"), email: "renter@example.com" });
+    const token = await signDevSession("Renter@Example.com", "secret", 1_800_000_000);
+    expect(await verifyDevSession(token, "secret")).toEqual({ id: await devUserId("renter@example.com"), email: "renter@example.com", signedInAt: 1_800_000_000 });
+    expect(await verifyDevSession(token.replace(".1800000000.", ".1900000000."), "secret")).toBeNull();
     expect(await verifyDevSession(token, "other")).toBeNull();
     expect(await verifyDevSession(token.replace(/^[^.]+/, btoa("evil@example.com")), "secret")).toBeNull();
     expect(await verifyDevSession("garbage", "secret")).toBeNull();

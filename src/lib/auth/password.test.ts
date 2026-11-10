@@ -3,6 +3,7 @@ import { MemoryPasswordProvider } from "@/lib/auth/memory-password";
 import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  mayChangePassword,
   passwordSignIn,
   requestPasswordReset,
   updatePassword,
@@ -150,12 +151,37 @@ describe("updatePassword", () => {
   it("needs a signed-in (recovery) session, a valid password, and is rate limited per user", async () => {
     const { provider, calls } = fakeProvider();
     const deps = { provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP };
-    expect(await updatePassword(deps, { userId: null, password: "new password", locale: "en" })).toEqual({ kind: "redirect", to: "/en/signin?status=expired" });
-    expect(await updatePassword(deps, { userId: "u1", password: "short", locale: "en" })).toEqual({ kind: "back", status: "weak" });
-    expect(await updatePassword({ ...deps, rateLimited: async () => true }, { userId: "u1", password: "new password", locale: "en" })).toEqual({ kind: "back", status: "rate" });
+    const ok = { mayChange: true };
+    expect(await updatePassword(deps, { userId: null, password: "new password", locale: "en", ...ok })).toEqual({ kind: "redirect", to: "/en/signin?status=expired" });
+    expect(await updatePassword(deps, { userId: "u1", password: "short", locale: "en", ...ok })).toEqual({ kind: "back", status: "weak" });
+    expect(await updatePassword({ ...deps, rateLimited: async () => true }, { userId: "u1", password: "new password", locale: "en", ...ok })).toEqual({ kind: "back", status: "rate" });
     expect(calls).toHaveLength(0);
-    expect(await updatePassword(deps, { userId: "u1", password: "new password", locale: "en" })).toEqual({ kind: "redirect", to: "/en/audits?password=updated" });
+    expect(await updatePassword(deps, { userId: "u1", password: "new password", locale: "en", ...ok })).toEqual({ kind: "redirect", to: "/en/audits?password=updated" });
     expect(calls).toEqual([{ method: "updatePassword", args: ["new password"] }]);
+  });
+});
+
+describe("password change needs a recovery session or a recent sign-in", () => {
+  const NOW = 1_800_000_000;
+  const RECENT = 600;
+
+  it("allows a recovery session, or any sign-in within the window", () => {
+    expect(mayChangePassword([{ method: "recovery", at: NOW - 3000 }], NOW, RECENT)).toBe(true);
+    expect(mayChangePassword([{ method: "password", at: NOW - 599 }], NOW, RECENT)).toBe(true);
+    expect(mayChangePassword([{ method: "otp", at: NOW - 30 }], NOW, RECENT)).toBe(true);
+  });
+
+  it("refuses an older session that did not come from a reset link", () => {
+    expect(mayChangePassword([{ method: "password", at: NOW - 601 }], NOW, RECENT)).toBe(false);
+    expect(mayChangePassword([], NOW, RECENT)).toBe(false);
+  });
+
+  it("updatePassword sends an older session back to sign in again, then to the reset page", async () => {
+    const { provider, calls } = fakeProvider();
+    const deps = { provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP };
+    expect(await updatePassword(deps, { userId: "u1", password: "new password", locale: "es", mayChange: false }))
+      .toEqual({ kind: "redirect", to: "/es/signin?status=reauth&next=%2Fes%2Freset-password" });
+    expect(calls).toHaveLength(0);
   });
 });
 

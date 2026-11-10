@@ -77,11 +77,25 @@ export async function requestPasswordReset(
   return { kind: "back", status: "reset_sent" };
 }
 
+/** How a session was authenticated (Supabase `amr` claim): method and unix seconds. */
+export type AuthMethod = { method: string; at: number };
+
+/**
+ * A password may be changed from a recovery session (the reset link) or within `recentSeconds` of any sign-in,
+ * so a session left open on a shared computer can't be used to take over the account.
+ */
+export function mayChangePassword(methods: AuthMethod[], nowSeconds: number, recentSeconds: number): boolean {
+  return methods.some((m) => m.method === "recovery" || nowSeconds - m.at <= recentSeconds);
+}
+
 export async function updatePassword(
   deps: Deps,
-  input: { userId: string | null; password: string; locale: Locale },
+  input: { userId: string | null; password: string; locale: Locale; mayChange: boolean },
 ): Promise<{ kind: "redirect"; to: string } | { kind: "back"; status: "weak" | "rate" | "error" }> {
   if (!input.userId) return { kind: "redirect", to: `/${input.locale}/signin?status=expired` };
+  if (!input.mayChange) {
+    return { kind: "redirect", to: `/${input.locale}/signin?status=reauth&next=${encodeURIComponent(`/${input.locale}/reset-password`)}` };
+  }
   if (!validPassword(input.password)) return { kind: "back", status: "weak" };
   if (await deps.rateLimited(input.userId)) return { kind: "back", status: "rate" };
   const result = await deps.provider.updatePassword(input.password);
