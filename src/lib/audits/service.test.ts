@@ -92,6 +92,7 @@ describe("scan", () => {
       summary: { itemCount: 5, totalOwedCents: 64000, linesScanned: SAMPLE_CASE.extraction.ledger.length },
       decision: { kind: "checkout", feeCents: 9600, minimumApplied: false },
       paymentUnderReview: false,
+      refundPending: false,
     });
     expect(JSON.stringify(result)).not.toMatch(/RUBS|Late Charge|1942/);
   });
@@ -180,13 +181,17 @@ describe("an audit never stays stuck in processing", () => {
 });
 
 describe("a paid checkout that did not unlock", () => {
-  it("is reported as under review instead of offering checkout again", async () => {
+  it("is reported as a pending refund, not as an unrecognized-session review", async () => {
     const audit = await readyAudit();
     await scanAudit(deps, USER, audit.id);
-    expect((await getFreeResult(deps, USER, audit.id))?.paymentUnderReview).toBe(false);
+    const flags = async () => {
+      const r = await getFreeResult(deps, USER, audit.id);
+      return { paymentUnderReview: r?.paymentUnderReview, refundPending: r?.refundPending };
+    };
+    expect(await flags()).toEqual({ paymentUnderReview: false, refundPending: false });
     await deps.repo.insertPayment({ auditId: audit.id, userId: USER, checkoutSessionId: "cs_test_1", amountCents: 9600, status: "pending" });
     expect(await deps.repo.applyCheckoutPaid({ eventId: "evt_1", eventType: "checkout.session.completed", checkoutSessionId: "cs_test_1", auditId: audit.id, amountCents: 100, currency: "usd", paymentIntentId: "pi_1" })).toBe("amount_mismatch");
-    expect((await getFreeResult(deps, USER, audit.id))?.paymentUnderReview).toBe(true);
+    expect(await flags()).toEqual({ paymentUnderReview: false, refundPending: true });
   });
 });
 
@@ -205,24 +210,30 @@ describe("after a verified payment", () => {
 });
 
 describe("payment under review (refund policy)", () => {
-  it("only while a payment is paid-not-refunded or an unknown-session review is open; a refunded payment unlocks checkout again", async () => {
+  it("splits refund-pending from unrecognized-session review; a recorded refund clears the pending state", async () => {
     const repo = deps.repo as MemoryAuditRepository;
     const audit = await readyAudit();
     await scanAudit(deps, USER, audit.id);
-    const review = async () => (await getFreeResult(deps, USER, audit.id))?.paymentUnderReview;
-    expect(await review()).toBe(false);
+    const flags = async () => {
+      const r = await getFreeResult(deps, USER, audit.id);
+      return { paymentUnderReview: r?.paymentUnderReview, refundPending: r?.refundPending };
+    };
+    expect(await flags()).toEqual({ paymentUnderReview: false, refundPending: false });
 
     await repo.insertPayment({ auditId: audit.id, userId: USER, checkoutSessionId: "cs_1", amountCents: 9600, status: "pending" });
     expect(await repo.applyCheckoutPaid({ eventId: "evt_1", eventType: "checkout.session.completed", checkoutSessionId: "cs_1", auditId: audit.id,
       amountCents: 100, currency: "usd", paymentIntentId: "pi_1" })).toBe("amount_mismatch");
-    expect(await review()).toBe(true); // refund not recorded yet (e.g. Stripe call failed, waiting for redelivery)
+    expect(await flags()).toEqual({ paymentUnderReview: false, refundPending: true }); // refund not recorded yet (retry)
     expect(await repo.recordRefund("evt_1", "re_1", 100)).toBe(true);
-    expect(await review()).toBe(false);
+    expect(await flags()).toEqual({ paymentUnderReview: false, refundPending: false });
     expect(await repo.recordRefund("evt_1", "re_2", 100)).toBe(false);
 
     expect(await repo.applyCheckoutPaid({ eventId: "evt_2", eventType: "checkout.session.completed", checkoutSessionId: "cs_unknown", auditId: audit.id,
       amountCents: 9600, currency: "usd", paymentIntentId: "pi_2" })).toBe("unknown_session");
-    expect(await review()).toBe(true);
+    expect(await flags()).toEqual({ paymentUnderReview: true, refundPending: false });
+    // A person closes the unknown-session review (no refund): the audit is no longer "under review".
+    repo.reviews.find((r) => r.eventId === "evt_2")!.resolvedAt = "2026-11-10T09:00:00Z";
+    expect(await flags()).toEqual({ paymentUnderReview: false, refundPending: false });
   });
 });
 

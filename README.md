@@ -27,7 +27,7 @@ With no env set, the app runs fully local (development only). It uses an in-memo
 ## Supabase
 - Migration: `supabase/migrations/20261109000000_site_v1.sql` (tables, RLS, private `documents` bucket, `save_scan_result` and `apply_checkout_paid`). Apply it to a non-production project first: `supabase db push --db-url <staging url>`.
 - RLS tests run on PGlite with a Supabase stub (`src/lib/db/rls.test.ts`), with no Supabase connection.
-- Auth: email magic link only. Add `{APP_URL}/auth/callback` to the allowed redirect URLs.
+- Auth: email magic link and email + password (Confirm email ON). Add `{APP_URL}/auth/callback` to the allowed redirect URLs. Keep the default email templates (`{{ .ConfirmationURL }}`): magic link and sign-up confirmation must arrive as a PKCE `code`; `/auth/callback` refuses a `token_hash` for them (login CSRF). A recovery template may link `{APP_URL}/auth/callback?token_hash={{ .TokenHash }}&type=recovery&locale=en` for cross-device resets; that session is held until the person confirms "Continue as <email>".
 
 ## Stripe (test mode)
 - Use a `sk_test_`/`rk_test_` key. A Stripe sandbox is recommended.
@@ -35,7 +35,7 @@ With no env set, the app runs fully local (development only). It uses an in-memo
 - The fee is computed on the server from the stored audit. An audit unlocks only on a verified webhook that reports `payment_status=paid` and an amount matching the stored fee. Returning to the success URL never unlocks anything.
 
 ## Rate limits
-Fixed-window counters in Supabase Postgres (`public.rate_limits`, atomic `rate_limit_hit` RPC, service role only). Upload, sign-in (magic link, password, reset) and checkout each count per IP and per user (or sign-in email). Defaults: upload 10/60s, sign-in 10/60s, checkout 20/60s; override with `LF_RATE_LIMIT_UPLOAD|SIGNIN|CHECKOUT=hits/seconds`. If the limiter can't be reached the request is refused, except in `SITE_ENV=development`. The memory backend (development only) counts in process. The daily audit cap (`LF_DAILY_AUDIT_LIMIT`) is enforced atomically at insert. Per-IP keys use `cf-connecting-ip`, then the first `x-forwarded-for` hop: confirm which header Spacefast sets.
+Fixed-window counters in Supabase Postgres (`public.rate_limits`, atomic `rate_limit_hit` RPC, service role only). Upload, sign-in (magic link, password, reset) and checkout each have a hard limit per user (or sign-in email). Defaults: upload 10/60s, sign-in 10/60s, checkout 20/60s; override with `LF_RATE_LIMIT_UPLOAD|SIGNIN|CHECKOUT=hits/seconds`. If the limiter can't be reached the request is refused, except in `SITE_ENV=development`. The memory backend (development only) counts in process. The daily audit cap (`LF_DAILY_AUDIT_LIMIT`) is enforced atomically at insert. Password sign-in also has a per-email wrong-password limit (`LF_PASSWORD_FAILURE_LIMIT`, default 5 per 15 minutes): a failure is reserved atomically before the attempt and forgiven unless the password was wrong (`rate_limit_forgive`). Supabase's leaked-password protection is a dashboard setting for the project owner. Per-IP limits are off by default: no client-IP header is trusted, because a client can send any `cf-connecting-ip` or `x-forwarded-for`. Set `LF_TRUSTED_IP_HEADER` (and optionally `LF_RATE_LIMIT_IP`, default 100/60s, loose) only after a header-echo test on a Spacefast preview from two networks shows the platform overwrites a client-sent value. For `x-forwarded-for` only the rightmost hop is used.
 
 ## Scripts
 | Script | What it does |

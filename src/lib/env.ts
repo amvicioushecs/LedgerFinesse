@@ -4,7 +4,7 @@
  * non-production refuses live Stripe keys.
  */
 
-import { DEFAULT_RATE_LIMITS, type RateLimitedAction, type RateLimits } from "@/lib/rate-limit";
+import { DEFAULT_IP_RATE_LIMIT, DEFAULT_PASSWORD_FAILURE_LIMIT, DEFAULT_RATE_LIMITS, type RateLimit, type RateLimits } from "@/lib/rate-limit";
 
 export interface ServerEnv {
   siteEnv: "development" | "preview" | "production";
@@ -21,6 +21,14 @@ export interface ServerEnv {
   dailyAuditLimit: number;
   /** Per action: hits per fixed window, per IP and per user. */
   rateLimits: RateLimits;
+  /** Loose per-IP limit; applies only with trustedIpHeader. */
+  ipRateLimit: RateLimit;
+  /** A password change needs a recovery session or a sign-in this recent. */
+  passwordChangeRecentSeconds: number;
+  /** Wrong passwords allowed per sign-in email per window. */
+  passwordFailureLimit: RateLimit;
+  /** Lower-case header name the host sets with the client IP; null (default) turns per-IP limits off. */
+  trustedIpHeader: string | null;
 }
 
 type Raw = Record<string, string | undefined>;
@@ -91,25 +99,26 @@ export function parseServerEnv(raw: Raw): ServerEnv {
   const dailyAuditLimit = Number(raw.LF_DAILY_AUDIT_LIMIT?.trim() || "10");
   if (!Number.isSafeInteger(dailyAuditLimit) || dailyAuditLimit < 1) errors.push("LF_DAILY_AUDIT_LIMIT must be a positive integer");
 
-  const rateLimits = { ...DEFAULT_RATE_LIMITS };
-  const rateLimitVars: Record<RateLimitedAction, [string, string | undefined]> = {
-    upload: ["LF_RATE_LIMIT_UPLOAD", raw.LF_RATE_LIMIT_UPLOAD],
-    signin: ["LF_RATE_LIMIT_SIGNIN", raw.LF_RATE_LIMIT_SIGNIN],
-    checkout: ["LF_RATE_LIMIT_CHECKOUT", raw.LF_RATE_LIMIT_CHECKOUT],
-  };
-  for (const action of Object.keys(DEFAULT_RATE_LIMITS) as RateLimitedAction[]) {
-    const [name, rawValue] = rateLimitVars[action];
+  const parseLimit = (name: string, rawValue: string | undefined, fallback: RateLimit): RateLimit => {
     const value = rawValue?.trim();
-    if (!value) continue;
+    if (!value) return fallback;
     const match = /^(\d+)\/(\d+)$/.exec(value);
     const [limit, windowSeconds] = match ? [Number(match[1]), Number(match[2])] : [0, 0];
-    if (limit < 1 || windowSeconds < 1) {
-      const d = DEFAULT_RATE_LIMITS[action];
-      errors.push(`${name} must look like ${d.limit}/${d.windowSeconds} (hits per window / window seconds)`);
-    } else {
-      rateLimits[action] = { limit, windowSeconds };
-    }
-  }
+    if (limit >= 1 && windowSeconds >= 1) return { limit, windowSeconds };
+    errors.push(`${name} must look like ${fallback.limit}/${fallback.windowSeconds} (hits per window / window seconds)`);
+    return fallback;
+  };
+  const rateLimits: RateLimits = {
+    upload: parseLimit("LF_RATE_LIMIT_UPLOAD", raw.LF_RATE_LIMIT_UPLOAD, DEFAULT_RATE_LIMITS.upload),
+    signin: parseLimit("LF_RATE_LIMIT_SIGNIN", raw.LF_RATE_LIMIT_SIGNIN, DEFAULT_RATE_LIMITS.signin),
+    checkout: parseLimit("LF_RATE_LIMIT_CHECKOUT", raw.LF_RATE_LIMIT_CHECKOUT, DEFAULT_RATE_LIMITS.checkout),
+  };
+  const ipRateLimit = parseLimit("LF_RATE_LIMIT_IP", raw.LF_RATE_LIMIT_IP, DEFAULT_IP_RATE_LIMIT);
+  const recentMinutes = Number(raw.LF_PASSWORD_CHANGE_RECENT_MINUTES?.trim() || "10");
+  if (!Number.isSafeInteger(recentMinutes) || recentMinutes < 1) errors.push("LF_PASSWORD_CHANGE_RECENT_MINUTES must be a positive integer");
+  const passwordFailureLimit = parseLimit("LF_PASSWORD_FAILURE_LIMIT", raw.LF_PASSWORD_FAILURE_LIMIT, DEFAULT_PASSWORD_FAILURE_LIMIT);
+  const trustedIpHeader = raw.LF_TRUSTED_IP_HEADER?.trim().toLowerCase() || null;
+  if (trustedIpHeader && !/^[a-z0-9-]+$/.test(trustedIpHeader)) errors.push("LF_TRUSTED_IP_HEADER must be a header name, e.g. x-real-ip");
 
   if (errors.length > 0) throw new Error(`Invalid server configuration:\n- ${errors.join("\n- ")}`);
   return {
@@ -124,6 +133,10 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     devSessionSecret: siteEnv === "development" ? raw.DEV_SESSION_SECRET?.trim() || "local-dev-only-not-a-secret" : null,
     dailyAuditLimit,
     rateLimits,
+    ipRateLimit,
+    passwordFailureLimit,
+    passwordChangeRecentSeconds: recentMinutes * 60,
+    trustedIpHeader,
   };
 }
 

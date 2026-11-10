@@ -24,10 +24,10 @@ function lineItemDescription(input: CheckoutSessionInput): string {
   if (input.minimumFeeApplied) {
     const fee = formatUsd(input.amountCents);
     return input.locale === "es"
-      ? `Tarifa mínima de ${fee} por los ${total} encontrados en su auditoría`
-      : `${fee} minimum fee for the ${total} found in your audit`;
+      ? `Tarifa mínima de ${fee} sobre los ${total} encontrados en tu auditoría`
+      : `${fee} minimum fee on the ${total} found in your audit`;
   }
-  return input.locale === "es" ? `15% de ${total} encontrados en su auditoría` : `15% of the ${total} found in your audit`;
+  return input.locale === "es" ? `15% de los ${total} encontrados en tu auditoría` : `15% of the ${total} found in your audit`;
 }
 
 function toInfo(s: Stripe.Checkout.Session): CheckoutSessionInfo {
@@ -91,14 +91,24 @@ export class StripeRefundGateway implements RefundGateway {
 
   /** Full refund (no amount). Stripe's own reason is "duplicate" for a second charge, otherwise "requested_by_customer". */
   async refund(paymentIntentId: string, idempotencyKey: string, reason: RefundReason) {
-    const refund = await this.stripe.refunds.create(
-      {
-        payment_intent: paymentIntentId,
-        reason: reason === "duplicate_payment" ? "duplicate" : "requested_by_customer",
-        metadata: { ledgerfinesse_reason: reason },
-      },
-      { idempotencyKey },
-    );
-    return { refundId: refund.id, amountCents: refund.amount };
+    try {
+      const refund = await this.stripe.refunds.create(
+        {
+          payment_intent: paymentIntentId,
+          reason: reason === "duplicate_payment" ? "duplicate" : "requested_by_customer",
+          metadata: { ledgerfinesse_reason: reason },
+        },
+        { idempotencyKey },
+      );
+      return { refundId: refund.id, amountCents: refund.amount };
+    } catch (error) {
+      // Stripe keeps idempotency keys for about 24 hours. A retry after that (a late redelivery) can't replay the
+      // first refund and is told the charge is already refunded: record the refund that exists instead.
+      if ((error as { code?: string }).code !== "charge_already_refunded") throw error;
+      const { data } = await this.stripe.refunds.list({ payment_intent: paymentIntentId, limit: 100 });
+      const existing = data.find((r) => r.status === "succeeded" || r.status === "pending" || r.status === "requires_action");
+      if (!existing) throw error;
+      return { refundId: existing.id, amountCents: existing.amount };
+    }
   }
 }

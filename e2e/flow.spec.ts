@@ -3,14 +3,13 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 /** A fresh client IP per auth test so the 10/min sign-in limit (live under miniflare too) isn't shared across tests. */
-const freshIp = () => `10.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
 
 const SHOTS = process.env.SCREENSHOT_DIR ?? "/workspace/ledgerfinesse/screenshots/v2";
 mkdirSync(SHOTS, { recursive: true });
 
 const COPY = {
-  en: { found: "We found $640.00 owed back to you.", fee: "Upfront payment: $96.00 (15% of $640.00 owed).", pay: "Pay $96.00 & Unlock Dashboard", letter: "2. Formal Dispute & Demand Letter", tenDays: "ten (10) business days", notLawFirm: "not a law firm" },
-  es: { found: "Encontramos $640.00 que te deben.", fee: "", pay: "", letter: "2. Carta formal de disputa y reclamación", tenDays: "diez (10) días hábiles", notLawFirm: "no es un despacho de abogados" },
+  en: { found: "We found $640.00 owed back to you.", fee: "Upfront payment: $96.00 (15% of $640.00 owed).", pay: "Pay $96.00 & Unlock Dashboard", letter: "2. Your Dispute Letter", tenDays: "ten (10) business days", notLawFirm: "not a law firm" },
+  es: { found: "Encontramos $640.00 que te deben.", fee: "", pay: "", letter: "2. Tu carta de disputa", tenDays: "diez (10) días hábiles", notLawFirm: "no es un despacho de abogados" },
 } as const;
 
 async function shot(page: Page, name: string) {
@@ -145,11 +144,10 @@ test("malformed audit ids are 404s, not server errors", async ({ request, baseUR
 });
 
 test("sign-in never redirects off-site, even through dot-segment tricks", async ({ request, baseURL }) => {
-  const ip = freshIp();
   for (const next of ["/.//evil.com", "/%2e%2e//evil.com", "//evil.com"]) {
     const res = await request.post("/auth/signin", {
       form: { email: `redirect-${Date.now()}@example.test`, next, locale: "en" },
-      headers: { origin: baseURL!, "cf-connecting-ip": ip },
+      headers: { origin: baseURL! },
       maxRedirects: 0,
     });
     expect(res.status(), next).toBe(303);
@@ -160,7 +158,6 @@ test("sign-in never redirects off-site, even through dot-segment tricks", async 
 test("password sign-up, wrong password, sign-in, reset email and new password (local dev backend)", async ({ page, context }) => {
   const email = `pw-${test.info().project.name}-${Date.now()}@example.test`;
   const form = page.getByTestId("password-form");
-  await page.setExtraHTTPHeaders({ "cf-connecting-ip": freshIp() });
   await page.goto(`/en/signin?next=${encodeURIComponent("/en/audits/new")}`);
   await form.locator('input[name="email"]').fill(email);
   await form.locator('input[name="password"]').fill("first password");

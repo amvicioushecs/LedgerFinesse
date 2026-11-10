@@ -301,6 +301,18 @@ end $$;
 revoke all on function public.rate_limit_hit(text[], integer, integer, timestamptz) from public, anon, authenticated;
 grant execute on function public.rate_limit_hit(text[], integer, integer, timestamptz) to service_role;
 
+-- Takes one hit back (used to count only wrong passwords: reserve before the attempt, forgive unless it failed).
+create or replace function public.rate_limit_forgive(p_keys text[], p_window_seconds integer, p_now timestamptz default now())
+returns void language sql security definer set search_path = '' as $$
+  update public.rate_limits
+     set hits = hits - 1
+   where bucket = any (p_keys)
+     and window_start = to_timestamp(floor(extract(epoch from p_now) / p_window_seconds) * p_window_seconds)
+     and hits > 0;
+$$;
+revoke all on function public.rate_limit_forgive(text[], integer, timestamptz) from public, anon, authenticated;
+grant execute on function public.rate_limit_forgive(text[], integer, timestamptz) to service_role;
+
 -- ---------------------------------------------------------------- new audit within the daily cap (service role only)
 -- Count and insert under a per-user transaction advisory lock, so concurrent uploads can't overshoot the cap.
 create or replace function public.insert_audit_within_cap(

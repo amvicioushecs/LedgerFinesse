@@ -6,9 +6,12 @@ import { MemoryAuditRepository, MemoryDocumentStore } from "@/lib/audits/memory-
 import type { AuditDeps } from "@/lib/audits/service";
 import { SupabaseAuditRepository, SupabaseDocumentStore } from "@/lib/audits/supabase-repository";
 import type { AuditRepository, Extractor } from "@/lib/audits/types";
+import {
+  RECOVERY_PENDING_COOKIE, RECOVERY_PENDING_MAX_AGE, decodeHeld, encodeHeld, type CallbackDeps, type HeldSession, type RecoveryConfirmDeps,
+} from "@/lib/auth/callback";
 import { DEV_SESSION_COOKIE, signDevSession, verifyDevSession } from "@/lib/auth/dev-session";
 import { MemoryPasswordProvider } from "@/lib/auth/memory-password";
-import type { PasswordAuthProvider } from "@/lib/auth/password";
+import { mayChangePassword, type AuthMethod, type PasswordAuthProvider } from "@/lib/auth/password";
 import { SupabasePasswordProvider } from "@/lib/auth/supabase-password";
 import { serverEnv, type ServerEnv } from "@/lib/env";
 import { demoExtractor } from "@/lib/extraction/demo";
@@ -17,7 +20,7 @@ import type { Locale } from "@/lib/i18n/locales";
 import { MOCK_WEBHOOK_SECRET, MockCheckoutGateway, MockRefundGateway, mockStripe } from "@/lib/payments/mock-gateway";
 import { createStripeClient, StripeCheckoutGateway, StripeRefundGateway } from "@/lib/payments/stripe-gateway";
 import type { CheckoutGateway, RefundGateway } from "@/lib/payments/types";
-import { MemoryRateLimitStore, clientIp, isRateLimited, type RateLimitStore, type RateLimitedAction } from "@/lib/rate-limit";
+import { MemoryRateLimitStore, checkRateLimit, clientIp, passwordFailureGuard, type RateLimitOutcome, type RateLimitStore, type RateLimitedAction } from "@/lib/rate-limit";
 import type Stripe from "stripe";
 
 export interface CurrentUser {
@@ -74,15 +77,98 @@ function supabaseAdmin(env: ServerEnv): SupabaseClient {
   });
 }
 
+/** Anon client with no cookie storage: verifies a recovery link without signing this browser in. */
+function supabaseDetached(env: ServerEnv): SupabaseClient {
+  if (!env.supabase) throw new Error("Supabase is not configured");
+  return createClient(env.supabase.url, env.supabase.anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+}
+
+/** /auth/callback deps. The memory backend sends no email links, so every link is refused there. */
+export async function callbackDeps(): Promise<CallbackDeps> {
+  const env = serverEnv();
+  if (env.backend === "memory") return { exchangeCode: async () => false, verifyRecovery: async () => null, holdRecovery: async () => {} };
+  return {
+    async exchangeCode(code) {
+      const { error } = await (await supabaseForRequest(env)).auth.exchangeCodeForSession(code);
+      return !error;
+    },
+    async verifyRecovery(tokenHash) {
+      const { data, error } = await supabaseDetached(env).auth.verifyOtp({ token_hash: tokenHash, type: "recovery" });
+      if (error || !data.session) return null;
+      return { accessToken: data.session.access_token, refreshToken: data.session.refresh_token };
+    },
+    async holdRecovery(session) {
+      (await cookies()).set(RECOVERY_PENDING_COOKIE, encodeHeld(session), {
+        httpOnly: true, sameSite: "lax", secure: env.appUrl.startsWith("https://"), path: "/", maxAge: RECOVERY_PENDING_MAX_AGE,
+      });
+    },
+  };
+}
+
+async function heldRecovery(): Promise<HeldSession | null> {
+  return decodeHeld((await cookies()).get(RECOVERY_PENDING_COOKIE)?.value);
+}
+
+/** The account a held recovery link belongs to, checked with Supabase (never read from the cookie itself). */
+export async function pendingRecoveryEmail(): Promise<string | null> {
+  const env = serverEnv();
+  const held = env.backend === "memory" ? null : await heldRecovery();
+  if (!held) return null;
+  const { data, error } = await supabaseDetached(env).auth.getUser(held.accessToken);
+  return error ? null : (data.user?.email ?? null);
+}
+
+export function recoveryConfirmDeps(): RecoveryConfirmDeps {
+  const env = serverEnv();
+  return {
+    async takePending() {
+      const held = env.backend === "memory" ? null : await heldRecovery();
+      (await cookies()).delete(RECOVERY_PENDING_COOKIE);
+      return held;
+    },
+    async setSession(held) {
+      const { error } = await (await supabaseForRequest(env)).auth.setSession({ access_token: held.accessToken, refresh_token: held.refreshToken });
+      return !error;
+    },
+    async revoke(held) {
+      const { error } = await supabaseAdmin(env).auth.admin.signOut(held.accessToken, "local");
+      if (error) console.error(JSON.stringify({ msg: "recovery revoke failed", status: error.status, code: error.code }));
+    },
+  };
+}
+
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   const env = serverEnv();
   if (env.backend === "memory") {
-    const token = (await cookies()).get(DEV_SESSION_COOKIE)?.value;
-    return verifyDevSession(token, devSecret(env));
+    const session = await verifyDevSession((await cookies()).get(DEV_SESSION_COOKIE)?.value, devSecret(env));
+    return session ? { id: session.id, email: session.email } : null;
   }
   const supabase = await supabaseForRequest(env);
   const { data } = await supabase.auth.getUser();
   return data.user ? { id: data.user.id, email: data.user.email ?? null } : null;
+}
+
+/**
+ * Whether this session may set a new password: a recovery session (reset link) or a recent sign-in, from the
+ * verified JWT's `amr` claim (dev sessions carry a signed sign-in time).
+ */
+export async function passwordChangeAllowed(): Promise<boolean> {
+  const env = serverEnv();
+  const now = Math.floor(Date.now() / 1000);
+  let methods: AuthMethod[] = [];
+  if (env.backend === "memory") {
+    const session = await verifyDevSession((await cookies()).get(DEV_SESSION_COOKIE)?.value, devSecret(env));
+    methods = session ? [{ method: "password", at: session.signedInAt }] : [];
+  } else {
+    const { data, error } = await (await supabaseForRequest(env)).auth.getClaims();
+    const amr = error ? [] : ((data?.claims.amr ?? []) as unknown[]);
+    methods = amr.flatMap((m) =>
+      typeof m === "object" && m && "method" in m && "timestamp" in m ? [{ method: String(m.method), at: Number(m.timestamp) }]
+      : m === "recovery" ? [{ method: "recovery", at: 0 }] : []);
+  }
+  return mayChangePassword(methods, now, env.passwordChangeRecentSeconds);
 }
 
 export type SignInResult = { kind: "email_sent" } | { kind: "signed_in" } | { kind: "error" };
@@ -152,7 +238,8 @@ function devPasswordProvider(env: ServerEnv): PasswordAuthProvider {
 export async function passwordDeps(request: Request) {
   const env = serverEnv();
   const provider = env.backend === "memory" ? devPasswordProvider(env) : new SupabasePasswordProvider(await supabaseForRequest(env));
-  return { provider, rateLimited: (subject: string) => rateLimited(request, "signin", subject), appUrl: env.appUrl };
+  const passwordFailures = passwordFailureGuard({ store: rateLimitStore(env), limit: env.passwordFailureLimit, failOpen: env.siteEnv === "development" });
+  return { provider, rateLimited: (subject: string) => rateLimited(request, "signin", subject), passwordFailures, appUrl: env.appUrl };
 }
 
 export async function signOut(): Promise<void> {
@@ -224,15 +311,19 @@ function rateLimitStore(env: ServerEnv): RateLimitStore {
       if (error) throw new Error(`rate_limit_hit: ${error.message}`);
       return data === true;
     },
+    async forgive(keys, windowSeconds) {
+      const { error } = await admin.rpc("rate_limit_forgive", { p_keys: keys, p_window_seconds: windowSeconds });
+      if (error) throw new Error(`rate_limit_forgive: ${error.message}`);
+    },
   };
 }
 
-/** Fails closed (refuses the request) if the limiter is unreachable, except in development. */
-export function rateLimited(request: Request, action: RateLimitedAction, subject: string | null): Promise<boolean> {
+/** "unavailable" (request refused, "temporarily unavailable") if the limiter is unreachable, except in development. */
+export function rateLimited(request: Request, action: RateLimitedAction, subject: string | null): Promise<RateLimitOutcome> {
   const env = serverEnv();
-  return isRateLimited(
-    { store: rateLimitStore(env), limits: env.rateLimits, failOpen: env.siteEnv === "development" },
+  return checkRateLimit(
+    { store: rateLimitStore(env), limits: env.rateLimits, ipLimit: env.ipRateLimit, failOpen: env.siteEnv === "development" },
     action,
-    { ip: clientIp(request.headers), subject },
+    { ip: clientIp(request.headers, env.trustedIpHeader), subject },
   );
 }

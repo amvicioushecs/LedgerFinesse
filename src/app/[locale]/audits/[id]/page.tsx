@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { fill, getDictionary } from "@/content/dictionaries";
+import { feeGateCopy } from "@/content/fee-copy";
 import { WaitForStatus } from "@/components/audit/wait-for-status";
 import { Disclaimer } from "@/components/disclaimer";
 import { ReportView } from "@/components/report/report-view";
@@ -37,7 +38,7 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
   const deps = await auditDeps();
   const free = await getFreeResult(deps, user.id, id);
   if (!free) notFound();
-  const { audit, summary, decision, paymentUnderReview } = free;
+  const { audit, summary, decision, paymentUnderReview, refundPending } = free;
   const caseId = audit.id.slice(0, 8).toUpperCase();
 
   if (audit.status === "unlocked") {
@@ -100,14 +101,25 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
 
   const total = formatUsd(summary.totalOwedCents);
   const fee = formatUsd(decision.feeCents);
+  const feeGate = feeGateCopy(r, decision);
   const net = formatUsd(summary.totalOwedCents - decision.feeCents);
   const checkout = typeof query.checkout === "string" ? query.checkout : null;
 
-  if (paymentUnderReview) {
+  if (paymentUnderReview || refundPending) {
     return (
       <Shell>
-        <h1 className="font-display text-3xl font-bold" data-testid="payment-review">{r.reviewTitle}</h1>
-        <p className="mt-2 text-muted">{r.reviewBody}</p>
+        {paymentUnderReview ? (
+          <>
+            <h1 className="font-display text-3xl font-bold" data-testid="payment-review">{r.reviewTitle}</h1>
+            <p className="mt-2 text-muted">{r.reviewBody}</p>
+          </>
+        ) : null}
+        {refundPending ? (
+          <>
+            <h1 className="font-display text-3xl font-bold" data-testid="payment-refund-pending">{r.refundPendingTitle}</h1>
+            <p className="mt-2 text-muted">{r.refundPendingBody}</p>
+          </>
+        ) : null}
       </Shell>
     );
   }
@@ -143,10 +155,14 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
       {checkout === "cancel" ? <p role="status" className="mt-6 rounded-md bg-butter p-3 text-sm font-semibold">{r.cancelled}</p> : null}
       {checkout === "error" ? <p role="alert" className="mt-6 rounded-md bg-butter p-3 text-sm font-semibold text-alert">{r.checkoutError}</p> : null}
       {checkout === "rate" ? <p role="alert" className="mt-6 rounded-md bg-butter p-3 text-sm font-semibold text-alert">{r.checkoutRate}</p> : null}
+      {checkout === "unavailable" ? <p role="alert" className="mt-6 rounded-md bg-butter p-3 text-sm font-semibold text-alert">{getDictionary(locale).common.unavailable}</p> : null}
 
       <section className="mt-6 rounded-lg border-2 border-forest p-6" data-testid="fee-gate">
-        <h2 className="font-display text-2xl font-bold">{decision.minimumApplied ? fill(r.feeTitleMinimum, { fee }) : r.feeTitle}</h2>
-        <p className="mt-2" data-testid="fee-line">{fill(decision.minimumApplied ? r.feeLineMinimum : r.feeLine, { fee, total })}</p>
+        <h2 className="font-display text-2xl font-bold">{fill(feeGate.title, { fee })}</h2>
+        <p className="mt-2" data-testid="fee-line">{fill(feeGate.line, { fee, total })}</p>
+        {feeGate.minimumNote ? (
+          <p role="note" className="mt-3 rounded-md border-2 border-gold bg-butter p-3 text-sm font-semibold" data-testid="fee-minimum-note">{r.feeMinimumNote}</p>
+        ) : null}
         <p className="mt-1 text-sm text-muted">{fill(r.keep, { net, total })}</p>
         <form action="/api/checkout" method="post" className="mt-5">
           <input type="hidden" name="auditId" value={audit.id} />

@@ -227,21 +227,26 @@ export interface FreeResult {
   audit: AuditRecord;
   summary: FreeSummary | null;
   decision: UnlockDecision | null;
-  /** A payment for this locked audit is unknown_session (manual review) or its automatic refund is waiting for a retry. */
+  /** Unrecognized checkout session: a person is reviewing it. */
   paymentUnderReview: boolean;
+  /** Automatic refund failed or is waiting for its retry. */
+  refundPending: boolean;
 }
 
 /** What anyone signed in as the owner may see before paying: status, count, total, fee. */
 export async function getFreeResult(deps: AuditDeps, userId: string, auditId: string): Promise<FreeResult | null> {
   const audit = await findFresh(deps, userId, auditId);
   if (!audit) return null;
-  if (audit.totalOwedCents === null || audit.itemCount === null) return { audit, summary: null, decision: null, paymentUnderReview: false };
+  const held = audit.status === "preview_ready";
+  if (audit.totalOwedCents === null || audit.itemCount === null) {
+    return { audit, summary: null, decision: null, paymentUnderReview: false, refundPending: false };
+  }
   return {
     audit,
     summary: { itemCount: audit.itemCount, totalOwedCents: audit.totalOwedCents, linesScanned: audit.linesScanned ?? 0 },
     decision: unlockDecision(audit.totalOwedCents),
-    paymentUnderReview:
-      audit.status === "preview_ready" && ((await deps.repo.hasPaidPayment(auditId)) || (await deps.repo.hasOpenReview(auditId))),
+    paymentUnderReview: held && (await deps.repo.hasUnknownSessionReview(auditId)),
+    refundPending: held && ((await deps.repo.hasPendingRefund(auditId)) || (await deps.repo.hasPaidPayment(auditId))),
   };
 }
 

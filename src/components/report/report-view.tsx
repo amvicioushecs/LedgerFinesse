@@ -1,13 +1,13 @@
 import Link from "next/link";
 import type { StoredFinding } from "@/lib/audits/types";
 import { fill, getDictionary } from "@/content/dictionaries";
+import { reportFeeLabel } from "@/content/fee-copy";
 import { Disclaimer } from "@/components/disclaimer";
 import { LetterActions } from "@/components/report/letter-actions";
 import { ReportTabs } from "@/components/report/report-tabs";
 import { getJurisdiction, rulesFor, type JurisdictionKey } from "@/lib/jurisdictions";
 import type { Locale } from "@/lib/i18n/locales";
 import { formatUsd } from "@/lib/money";
-import { feeKind } from "@/lib/pricing";
 
 export interface LeaseClause {
   section: Record<Locale, string>;
@@ -239,7 +239,7 @@ export function ReportView(props: ReportViewProps) {
         <div className="rounded-lg border border-line p-5">
           <p className="text-xs font-bold uppercase text-muted">{d.feeCard}</p>
           <p className="mt-1 text-sm">
-            {{ percent: d.fee, minimum: d.feeMinimum, free_below_minimum: d.feeFree, none: d.fee }[feeKind(props.totalOwedCents, props.feeCents)]}:{" "}
+            {reportFeeLabel(d, props.totalOwedCents, props.feeCents)}:{" "}
             <strong data-testid="report-fee">{formatUsd(props.feeCents)}</strong>
           </p>
           <p className="text-sm">
