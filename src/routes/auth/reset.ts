@@ -5,14 +5,15 @@ import { isLocale, type Locale } from "@/lib/i18n/locales";
 import { isSameOrigin, passwordDeps } from "@/lib/server/runtime";
 import { serverEnv } from "@/lib/env";
 
-/** Sends Supabase's password-reset email. Always answers "sent" so it can't be used to find accounts. */
+/** Emails a password-reset code (Neon Auth). Always answers "sent" so it can't be used to find accounts. */
 export async function POST(request: NextRequest) {
   if (!isSameOrigin(request)) return new NextResponse("Forbidden", { status: 403 });
   const form = await request.formData();
   const localeValue = String(form.get("locale") ?? "en");
   const locale: Locale = isLocale(localeValue) ? localeValue : "en";
-  const result = await requestPasswordReset(await passwordDeps(request), { email: String(form.get("email") ?? ""), locale });
+  const result = await requestPasswordReset(await passwordDeps(request), { email: String(form.get("email") ?? "") });
   // Neon Auth emails a reset code: continue to the code form (same answer whether or not the account exists).
+  // The development-only memory backend sends nothing and goes back to sign-in.
   if (result.status === "reset_sent" && serverEnv().backend === "neon") {
     return NextResponse.redirect(new URL(`/${locale}/reset-password?status=reset_sent`, request.url), 303);
   }

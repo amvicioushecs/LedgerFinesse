@@ -109,22 +109,22 @@ describe("NeonPasswordProvider", () => {
 
   it("answers an existing address exactly like a new sign-up (no account enumeration)", async () => {
     const provider: PasswordAuthProvider = new NeonPasswordProvider(api, pending);
-    expect(await provider.signUp("new@example.com", "pw", "")).toBe("confirm");
+    expect(await provider.signUp("new@example.com", "pw")).toBe("confirm");
     expect(api.calls).toEqual(["signUpEmail:new@example.com", "sendOtp:email-verification:new@example.com"]);
     const fresh = { ...pending.value };
     for (const code of ["USER_ALREADY_EXISTS", "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL"]) {
       api.results.signUpEmail = fail(code);
       await pending.clear();
-      expect(await provider.signUp("new@example.com", "pw", "")).toBe("confirm");
+      expect(await provider.signUp("new@example.com", "pw")).toBe("confirm");
       expect(pending.value).toEqual(fresh);
     }
     api.results.signUpEmail = fail("PASSWORD_TOO_SHORT");
-    expect(await provider.signUp("x@example.com", "pw", "")).toBe("weak");
+    expect(await provider.signUp("x@example.com", "pw")).toBe("weak");
   });
 
   it("sends a reset code and binds it to this browser, whether or not the account exists", async () => {
     const provider: PasswordAuthProvider = new NeonPasswordProvider(api, pending);
-    await provider.sendReset("A@example.com", "");
+    await provider.sendReset("A@example.com");
     expect(api.calls).toEqual(["sendOtp:forget-password:a@example.com"]);
     expect(pending.value).toEqual({ purpose: "reset", email: "a@example.com" });
   });
@@ -168,7 +168,7 @@ describe("resetWithCode (the recovery path: code from the email + new password, 
   });
 });
 
-describe("fromSdkError (the SDK reports Supabase-style codes; map back to Better Auth's)", () => {
+describe("fromSdkError (the SDK reports Supabase-compatible codes; map back to Better Auth's)", () => {
   it("maps credential and account errors", () => {
     expect(fromSdkError({ code: "invalid_credentials", status: 401, message: "Invalid email or password" }, "password")).toBe("INVALID_EMAIL_OR_PASSWORD");
     expect(fromSdkError({ code: "email_not_confirmed", status: 422, message: "Email verification required" }, "password")).toBe("EMAIL_NOT_VERIFIED");

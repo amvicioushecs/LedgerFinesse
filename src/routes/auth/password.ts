@@ -3,7 +3,7 @@ import { passwordSignIn } from "@/lib/auth/password";
 import { isLocale, type Locale } from "@/lib/i18n/locales";
 import { isSameOrigin, passwordDeps } from "@/lib/server/runtime";
 
-/** Email + password sign-in or sign-up (Supabase Auth; sign-up sends Supabase's confirmation email). */
+/** Email + password sign-in or sign-up (Neon Auth; sign-up emails a confirmation code). */
 export async function POST(request: NextRequest) {
   if (!isSameOrigin(request)) return new NextResponse("Forbidden", { status: 403 });
   const form = await request.formData();

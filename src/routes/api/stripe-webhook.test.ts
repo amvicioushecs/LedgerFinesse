@@ -7,7 +7,7 @@ vi.mock("@/lib/server/runtime", () => ({ webhookDeps: () => ({}) }));
 const env = vi.hoisted(() => ({ current: { stripeMode: "mock", siteEnv: "preview" } as { stripeMode: string; siteEnv: string } }));
 vi.mock("@/lib/env", async (original) => ({ ...(await original<typeof import("@/lib/env")>()), serverEnv: () => env.current }));
 
-const { POST } = await import("@/app/api/stripe/webhook/route");
+const { POST } = await import("@/routes/api/stripe-webhook");
 const call = () => POST(new Request("https://app.test/api/stripe/webhook", { method: "POST", body: "{}", headers: { "stripe-signature": "t=1,v1=x" } }) as never);
 
 afterEach(() => handled.mockClear());

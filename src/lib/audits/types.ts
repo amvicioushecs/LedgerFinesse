@@ -121,8 +121,8 @@ export interface CheckoutPaidEvent {
 }
 
 /**
- * Data access. Owner-scoped reads (`userId` args) must be enforced by the store itself: the Supabase
- * implementation reads through the renter's session so RLS applies; the memory one mirrors the rules.
+ * Data access. Owner-scoped reads (`userId` args) must be enforced by the store itself: the Neon
+ * implementation filters every owner query by user id in SQL; the memory one mirrors the rules.
  */
 export interface AuditRepository {
   insertAudit(audit: AuditRecord): Promise<void>;

@@ -8,12 +8,11 @@ import { DEFAULT_IP_RATE_LIMIT, DEFAULT_PASSWORD_FAILURE_LIMIT, DEFAULT_RATE_LIM
 
 export interface ServerEnv {
   siteEnv: "development" | "preview" | "production";
-  backend: "memory" | "supabase" | "neon";
+  backend: "memory" | "neon";
   stripeMode: "mock" | "stripe";
   extractionMode: "demo" | "gemini";
   appUrl: string;
-  supabase: { url: string; anonKey: string; serviceRoleKey: string } | null;
-  /** LF_BACKEND=neon: Postgres (owner role, server only) and Managed Better Auth (server-side calls only). */
+  /** LF_BACKEND=neon: Postgres (owner role, server only) and Neon Auth (Managed Better Auth, server-side calls only). */
   neon: { databaseUrl: string; authBaseUrl: string; cookieSecret: string } | null;
   stripe: { secretKey: string; webhookSecret: string } | null;
   gemini: { apiKey: string; model: string } | null;
@@ -25,7 +24,7 @@ export interface ServerEnv {
   rateLimits: RateLimits;
   /** Loose per-IP limit; applies only with trustedIpHeader. */
   ipRateLimit: RateLimit;
-  /** A password change needs a recovery session or a sign-in this recent. */
+  /** A password change needs a sign-in this recent. */
   passwordChangeRecentSeconds: number;
   /** Wrong passwords allowed per sign-in email per window. */
   passwordFailureLimit: RateLimit;
@@ -52,7 +51,7 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     return value ?? "";
   };
 
-  // A production build (next start, the OpenNext worker) never assumes development: SITE_ENV must be set.
+  // A production build (next start, the Spacefast worker) never assumes development: SITE_ENV must be set.
   // Only `next dev` and tests may default it; any other server (including a NODE_ENV-less worker, see
   // serverEnv) must set it. `next build` also runs with NODE_ENV=production while prerendering; it is not a server.
   // (Callers that pass no NODE_ENV at all are unit tests of this parser.)
@@ -62,7 +61,7 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     errors.push("SITE_ENV is required in a production build (development, preview or production); it has no default there");
   }
   const siteEnv = pick(raw, "SITE_ENV", ["development", "preview", "production"] as const, "development", errors);
-  const backend = pick(raw, "LF_BACKEND", ["memory", "supabase", "neon"] as const, "memory", errors);
+  const backend = pick(raw, "LF_BACKEND", ["memory", "neon"] as const, "memory", errors);
   const stripeMode = pick(raw, "STRIPE_MODE", ["mock", "stripe"] as const, "mock", errors);
   const extractionMode = pick(raw, "EXTRACTION_MODE", ["demo", "gemini"] as const, "demo", errors);
   const appUrl = (raw.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000").replace(/\/+$/, "");
@@ -81,11 +80,6 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     // Memory-backend sign-in issues a session for any typed email, without verification.
     if (backend === "memory") errors.push("LF_BACKEND=memory is only allowed in SITE_ENV=development");
   }
-
-  const supabase =
-    backend === "supabase"
-      ? { url: need("NEXT_PUBLIC_SUPABASE_URL"), anonKey: need("NEXT_PUBLIC_SUPABASE_ANON_KEY"), serviceRoleKey: need("SUPABASE_SERVICE_ROLE_KEY") }
-      : null;
 
   let neon: ServerEnv["neon"] = null;
   if (backend === "neon") {
@@ -136,7 +130,6 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     stripeMode,
     extractionMode,
     appUrl,
-    supabase,
     neon,
     stripe,
     gemini,
@@ -168,7 +161,7 @@ export function serverEnvError(): string | null {
 }
 
 export function serverEnv(): ServerEnv {
-  // Under workerd process.env may carry no NODE_ENV at runtime: treat that as hosted, never as development.
+  // In the Spacefast worker (workerd) process.env may carry no NODE_ENV at runtime: treat that as hosted, never as development.
   cached ??= parseServerEnv({ ...process.env, NODE_ENV: process.env.NODE_ENV || "production" });
   return cached;
 }

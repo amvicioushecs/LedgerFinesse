@@ -13,28 +13,20 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t.signup.title, robots: PRIVATE_ROBOTS };
 }
 
-const NOTICE_STATUSES = new Set(["confirm", "reset_sent", "confirmed_signin", "recovery_cancelled", "password_reset"]);
+const NOTICE_STATUSES = new Set(["confirm", "reset_sent", "password_reset"]);
 
 async function SignInForm({ locale, searchParams }: { locale: Locale; searchParams: PageProps<"/[locale]/signin">["searchParams"] }) {
   const t = getDictionary(locale);
   const params = await searchParams;
   const next = safeNextPath(typeof params.next === "string" ? params.next : null, locale);
   const status = typeof params.status === "string" ? params.status : null;
-  if (status === "sent") {
-    return (
-      <p role="status" className="rounded-md bg-mint p-4 font-semibold" data-testid="signin-sent">
-        {t.signup.sent} <span className="font-normal">{t.signup.passwordless}</span>
-      </p>
-    );
-  }
   const p = t.signup.password;
   const passwordStatus: Record<string, string> = {
     invalid: p.invalid, locked: p.locked, reauth: p.reauth, unconfirmed: p.unconfirmed, weak: fill(p.weak, { min: PASSWORD_MIN_LENGTH }), confirm: p.confirmSent,
-    reset_sent: p.resetSent, expired: p.expired, confirmed_signin: p.confirmedSignIn, recovery_cancelled: p.confirmCancelled,
-    leaked: p.leaked, password_reset: p.passwordReset,
+    reset_sent: p.resetSent, expired: p.expired, leaked: p.leaked, password_reset: p.passwordReset,
   };
   const statusIsNotice = status !== null && NOTICE_STATUSES.has(status);
-  // Neon backend: an emailed code is waiting in this browser (sign-in or email verification).
+  // An emailed code is waiting in this browser (sign-in or email verification).
   const pending = await pendingCode();
   const codePending = pending && pending.purpose !== "reset" ? pending : null;
   const inputClass = "mt-1 block w-full rounded-md border border-line px-3 py-3 text-base";

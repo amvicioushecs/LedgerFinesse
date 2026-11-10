@@ -15,19 +15,19 @@ describe("proxy", () => {
   it("refuses to serve pages when a production build has no SITE_ENV (fails closed, N2)", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("SITE_ENV", "");
-    vi.stubEnv("LF_BACKEND", "supabase");
+    vi.stubEnv("LF_BACKEND", "neon");
     const proxy = await loadProxy();
     const res = await proxy(new NextRequest("https://app.test/en"));
     expect(res.status).toBe(503);
   });
 
-  it("also fails closed when the runtime has no NODE_ENV at all (the worker under workerd)", async () => {
+  it("also fails closed when the runtime has no NODE_ENV at all (the Spacefast worker under workerd)", async () => {
     vi.stubEnv("NODE_ENV", undefined);
     vi.stubEnv("SITE_ENV", undefined);
-    vi.stubEnv("LF_BACKEND", "supabase");
-    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.invalid");
-    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon");
-    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service");
+    vi.stubEnv("LF_BACKEND", "neon");
+    vi.stubEnv("DATABASE_URL", "postgresql://u:p@ep-x.example.invalid/db");
+    vi.stubEnv("NEON_AUTH_BASE_URL", "https://auth.example.invalid/db/auth");
+    vi.stubEnv("NEON_AUTH_COOKIE_SECRET", "0123456789abcdef0123456789abcdef");
     const proxy = await loadProxy();
     expect((await proxy(new NextRequest("https://app.test/en"))).status).toBe(503);
   });

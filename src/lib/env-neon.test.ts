@@ -13,7 +13,6 @@ describe("parseServerEnv: LF_BACKEND=neon", () => {
     const env = parseServerEnv({ SITE_ENV: "preview", LF_BACKEND: "neon", STRIPE_MODE: "stripe", ...neon, ...stripe });
     expect(env.backend).toBe("neon");
     expect(env.neon).toEqual({ databaseUrl: neon.DATABASE_URL, authBaseUrl: neon.NEON_AUTH_BASE_URL, cookieSecret: neon.NEON_AUTH_COOKIE_SECRET });
-    expect(env.supabase).toBeNull();
   });
 
   it("fails closed when any Neon setting is missing", () => {

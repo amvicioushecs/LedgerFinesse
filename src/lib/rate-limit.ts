@@ -5,7 +5,7 @@ import { isIP } from "node:net";
  * per-IP limit (LF_RATE_LIMIT_IP, default 100/60) applies only when LF_TRUSTED_IP_HEADER names a header the host
  * sets itself; by default no header is trusted and per-IP limits are off, because a client can send any
  * cf-connecting-ip or x-forwarded-for it likes (each spoofed value would also be a fresh key and a new row).
- * Counters live in Supabase Postgres (public.rate_limit_hit: atomic upsert-and-increment per key and window); the
+ * Counters live in Neon Postgres (public.rate_limit_hit: atomic upsert-and-increment per key and window); the
  * development-only memory backend counts in process. The daily audit cap is separate (audit service).
  */
 export type RateLimitedAction = "upload" | "signin" | "checkout";

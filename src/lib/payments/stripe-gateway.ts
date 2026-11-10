@@ -11,7 +11,7 @@ export const STRIPE_TIMEOUT_MS = 10_000;
 export function createStripeClient(secretKey: string): Stripe {
   return new Stripe(secretKey, {
     apiVersion: STRIPE_API_VERSION,
-    // fetch + SubtleCrypto work on Cloudflare Workers (no Node http).
+    // fetch + SubtleCrypto work in the Spacefast worker (workerd, no Node http).
     httpClient: Stripe.createFetchHttpClient(),
     maxNetworkRetries: 2,
     timeout: STRIPE_TIMEOUT_MS,

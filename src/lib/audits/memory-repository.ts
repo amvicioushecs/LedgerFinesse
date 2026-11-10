@@ -2,8 +2,8 @@ import { REFUNDABLE_REASONS, type RefundReason, type AuditRecord, type AuditRepo
 import type { Locale } from "@/lib/i18n/locales";
 
 /**
- * In-process store for tests, local e2e and demo mode. Mirrors the SQL rules in
- * supabase/migrations (owner scoping, paywall, apply_checkout_paid). Never used in production.
+ * In-process store for tests, local e2e and demo mode. Mirrors the rules in neon/migrations and
+ * neon-repository.ts (owner scoping, paywall, apply_checkout_paid). Never used in production.
  */
 export class MemoryAuditRepository implements AuditRepository {
   private audits = new Map<string, AuditRecord>();
