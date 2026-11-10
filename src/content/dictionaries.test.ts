@@ -71,7 +71,6 @@ describe("Copy Desk final strings (PR #2)", () => {
       ["signup.password.sendReset", en.signup.password.sendReset, "Email me a reset link"],
       ["signup.password.resetSent", en.signup.password.resetSent, "If that email has an account, we sent a reset link. Check your inbox and spam folder."],
       ["signup.password.expired", en.signup.password.expired, "That link has expired or was already used. Request a new one."],
-      ["signup.password.confirmedSignIn", en.signup.password.confirmedSignIn, "Your email is confirmed, sign in to continue."],
       ["signup.password.resetTitle", en.signup.password.resetTitle, "Set a new password"],
       ["signup.password.newLabel", en.signup.password.newLabel, "New password"],
       ["signup.password.save", en.signup.password.save, "Save new password"],
@@ -98,8 +97,6 @@ describe("Copy Desk final strings (PR #2)", () => {
       ["result.checkoutRate", en.result.checkoutRate, "Too many checkout attempts. Wait a minute and try again."],
       ["result.reviewTitle", en.result.reviewTitle, "Payment under review"],
       ["signup.password.locked", en.signup.password.locked, "Too many wrong passwords. Password sign-in is paused for this email for 15 minutes. You can still sign in with an email link or reset your password."],
-      ["signup.password.confirmBody", en.signup.password.confirmBody, "This reset link is for {email}. Continue only if that's your account."],
-      ["signup.password.confirmCancelled", en.signup.password.confirmCancelled, "No changes were made, and your password is the same. If you didn't ask for a reset, you can ignore that email."],
       ["signup.password.codeTitle", en.signup.password.codeTitle, "Enter the 6-digit code we emailed to {email}."],  // Neon draft, pending Copy Desk
       ["signup.password.codeLabel", en.signup.password.codeLabel, "Code"],  // Neon draft, pending Copy Desk
       ["signup.password.codeSubmit", en.signup.password.codeSubmit, "Continue"],  // Neon draft, pending Copy Desk
@@ -142,7 +139,6 @@ describe("Copy Desk final strings (PR #2)", () => {
       ["signup.password.sendReset", es.signup.password.sendReset, "Envíame un enlace para restablecerla"],
       ["signup.password.resetSent", es.signup.password.resetSent, "Si ese correo tiene una cuenta, te enviamos un enlace para restablecerla. Revisa tu bandeja de entrada y la carpeta de spam."],
       ["signup.password.expired", es.signup.password.expired, "Ese enlace venció o ya se usó. Pide uno nuevo."],
-      ["signup.password.confirmedSignIn", es.signup.password.confirmedSignIn, "Tu correo está confirmado. Inicia sesión para continuar."],
       ["signup.password.resetTitle", es.signup.password.resetTitle, "Crea una contraseña nueva"],
       ["signup.password.newLabel", es.signup.password.newLabel, "Contraseña nueva"],
       ["signup.password.save", es.signup.password.save, "Guardar contraseña nueva"],
@@ -169,8 +165,6 @@ describe("Copy Desk final strings (PR #2)", () => {
       ["result.checkoutRate", es.result.checkoutRate, "Demasiados intentos de pago. Espera un minuto e inténtalo de nuevo."],
       ["result.reviewTitle", es.result.reviewTitle, "Pago en revisión"],
       ["signup.password.locked", es.signup.password.locked, "Demasiadas contraseñas incorrectas. El inicio de sesión con contraseña está en pausa para este correo durante 15 minutos. Aún puedes entrar con un enlace por correo o restablecer tu contraseña."],
-      ["signup.password.confirmBody", es.signup.password.confirmBody, "Este enlace es para restablecer la contraseña de {email}. Continúa solo si esa es tu cuenta."],
-      ["signup.password.confirmCancelled", es.signup.password.confirmCancelled, "No se hizo ningún cambio y tu contraseña sigue igual. Si no pediste restablecerla, puedes ignorar ese correo."],
       ["signup.password.codeTitle", es.signup.password.codeTitle, "Escribe el código de 6 dígitos que enviamos a {email}."],  // Neon draft, pending Copy Desk
       ["signup.password.codeLabel", es.signup.password.codeLabel, "Código"],  // Neon draft, pending Copy Desk
       ["signup.password.codeSubmit", es.signup.password.codeSubmit, "Continuar"],  // Neon draft, pending Copy Desk

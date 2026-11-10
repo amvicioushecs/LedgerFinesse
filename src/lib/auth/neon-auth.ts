@@ -152,7 +152,7 @@ export class NeonPasswordProvider implements PasswordAuthProvider {
 }
 
 /**
- * @neondatabase/auth (0.7.0-beta) rewrites Better Auth errors into Supabase-style codes and loses the OTP ones
+ * @neondatabase/auth (0.7.0-beta) rewrites Better Auth errors into its own Supabase-compatible codes and loses the OTP ones
  * (INVALID_OTP and OTP_EXPIRED become validation_failed, TOO_MANY_ATTEMPTS becomes feature_not_supported). Map back,
  * using the status and message for codes. Anything unrecognized stays unexpected (never "wrong password/code").
  */

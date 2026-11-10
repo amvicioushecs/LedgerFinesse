@@ -9,9 +9,7 @@ import {
   updatePassword,
   type PasswordAuthProvider,
 } from "@/lib/auth/password";
-import { SupabasePasswordProvider } from "@/lib/auth/supabase-password";
 
-const APP = "https://app.test";
 
 function fakeProvider(overrides: Partial<PasswordAuthProvider> = {}) {
   const calls: { method: string; args: unknown[] }[] = [];
@@ -39,7 +37,7 @@ describe("passwordSignIn: per-email wrong-password limit", () => {
     return { log, g: { reserve: async (e: string) => (log.push(`reserve:${e}`), outcome), forgive: async (e: string) => void log.push(`forgive:${e}`) } };
   }
   const signIn = (provider: PasswordAuthProvider, passwordFailures: ReturnType<typeof guard>["g"]) =>
-    passwordSignIn({ provider, rateLimited: notLimited, passwordFailures, appUrl: APP }, { ...base, email: "A@x.co", intent: "signin", next: "/en/audits" });
+    passwordSignIn({ provider, rateLimited: notLimited, passwordFailures }, { ...base, email: "A@x.co", intent: "signin", next: "/en/audits" });
 
   it("a wrong password keeps its reserved failure", async () => {
     const { log, g } = guard();
@@ -65,18 +63,18 @@ describe("passwordSignIn: per-email wrong-password limit", () => {
     const { provider, calls } = fakeProvider();
     expect(await signIn(provider, guard("unavailable").g)).toEqual({ kind: "back", status: "unavailable", next: "/en/audits" });
     const down = async () => "unavailable" as const;
-    expect(await passwordSignIn({ provider, rateLimited: down, passwordFailures: noFailures, appUrl: APP }, { ...base, intent: "signup", next: "/en/audits" }))
+    expect(await passwordSignIn({ provider, rateLimited: down, passwordFailures: noFailures }, { ...base, intent: "signup", next: "/en/audits" }))
       .toEqual({ kind: "back", status: "unavailable", next: "/en/audits" });
-    expect(await requestPasswordReset({ provider, rateLimited: down, passwordFailures: noFailures, appUrl: APP }, { email: "a@example.com", locale: "en" }))
+    expect(await requestPasswordReset({ provider, rateLimited: down, passwordFailures: noFailures }, { email: "a@example.com" }))
       .toEqual({ kind: "back", status: "unavailable" });
-    expect(await updatePassword({ provider, rateLimited: down, passwordFailures: noFailures, appUrl: APP }, { userId: "u1", password: "new password", locale: "en", mayChange: true }))
+    expect(await updatePassword({ provider, rateLimited: down, passwordFailures: noFailures }, { userId: "u1", password: "new password", locale: "en", mayChange: true }))
       .toEqual({ kind: "back", status: "unavailable" });
     expect(calls).toHaveLength(0);
   });
 
   it("sign-up does not touch the wrong-password counter", async () => {
     const { log, g } = guard();
-    await passwordSignIn({ provider: fakeProvider().provider, rateLimited: notLimited, passwordFailures: g, appUrl: APP }, { ...base, intent: "signup", next: null });
+    await passwordSignIn({ provider: fakeProvider().provider, rateLimited: notLimited, passwordFailures: g }, { ...base, intent: "signup", next: null });
     expect(log).toEqual([]);
   });
 });
@@ -84,7 +82,7 @@ describe("passwordSignIn: per-email wrong-password limit", () => {
 describe("passwordSignIn", () => {
   it("signs in and continues to a safe next path", async () => {
     const { provider, calls } = fakeProvider();
-    expect(await passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP }, { ...base, intent: "signin", next: "/en/audits" }))
+    expect(await passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures }, { ...base, intent: "signin", next: "/en/audits" }))
       .toEqual({ kind: "redirect", to: "/en/audits" });
     expect(calls).toEqual([{ method: "signIn", args: ["a@example.com", "correct horse"] }]);
   });
@@ -92,7 +90,7 @@ describe("passwordSignIn", () => {
   it("uses safeNextPath: dot-segment and protocol-relative next paths fall back", async () => {
     const { provider } = fakeProvider();
     for (const next of ["/.//evil.com", "//evil.com", "https://evil.com", "/%2e%2e//evil.com"]) {
-      expect(await passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP }, { ...base, intent: "signin", next }))
+      expect(await passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures }, { ...base, intent: "signin", next }))
         .toEqual({ kind: "redirect", to: "/en/audits/new" });
     }
   });
@@ -101,7 +99,7 @@ describe("passwordSignIn", () => {
     const { provider, calls } = fakeProvider();
     const subjects: string[] = [];
     const rateLimited = async (subject: string) => (subjects.push(subject), "limited" as const);
-    expect(await passwordSignIn({ provider, rateLimited, passwordFailures: noFailures, appUrl: APP }, { ...base, email: "A@Example.com", intent: "signin", next: "/en/audits" }))
+    expect(await passwordSignIn({ provider, rateLimited, passwordFailures: noFailures }, { ...base, email: "A@Example.com", intent: "signin", next: "/en/audits" }))
       .toEqual({ kind: "back", status: "rate", next: "/en/audits" });
     expect(subjects).toEqual(["a@example.com"]);
     expect(calls).toHaveLength(0);
@@ -110,7 +108,7 @@ describe("passwordSignIn", () => {
   it("validates email and password length on the server", async () => {
     const { provider, calls } = fakeProvider();
     const run = (email: string, password: string) =>
-      passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP }, { ...base, email, password, intent: "signup", next: "" });
+      passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures }, { ...base, email, password, intent: "signup", next: "" });
     expect(await run("nope", "long enough pw")).toMatchObject({ kind: "back", status: "error" });
     expect(await run("a@example.com", "x".repeat(PASSWORD_MIN_LENGTH - 1))).toMatchObject({ kind: "back", status: "weak" });
     expect(await run("a@example.com", "x".repeat(PASSWORD_MAX_LENGTH + 1))).toMatchObject({ kind: "back", status: "weak" });
@@ -120,7 +118,7 @@ describe("passwordSignIn", () => {
   it("measures the 72 limit in UTF-8 bytes (bcrypt's limit), not characters", async () => {
     const { provider, calls } = fakeProvider();
     const run = (password: string) =>
-      passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP }, { ...base, password, intent: "signup", next: "" });
+      passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures }, { ...base, password, intent: "signup", next: "" });
     // 37 two-byte characters = 74 bytes: too long, though only 37 characters.
     expect(await run("ñ".repeat(37))).toMatchObject({ kind: "back", status: "weak" });
     // 18 four-byte emoji = 72 bytes: allowed.
@@ -131,50 +129,50 @@ describe("passwordSignIn", () => {
   it("maps wrong credentials and unconfirmed accounts to their own statuses", async () => {
     for (const result of ["invalid", "unconfirmed", "error"] as const) {
       const { provider } = fakeProvider({ signIn: async () => result });
-      expect(await passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP }, { ...base, intent: "signin", next: "/en/audits" }))
+      expect(await passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures }, { ...base, intent: "signin", next: "/en/audits" }))
         .toEqual({ kind: "back", status: result, next: "/en/audits" });
     }
   });
 
-  it("signs up with Supabase email confirmation: the link returns through /auth/callback to next", async () => {
+  it("signs up with email confirmation and comes back to the safe next path", async () => {
     const { provider, calls } = fakeProvider();
-    expect(await passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP }, { ...base, locale: "es", intent: "signup", next: "/es/audits/new" }))
+    expect(await passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures }, { ...base, locale: "es", intent: "signup", next: "/es/audits/new" }))
       .toEqual({ kind: "back", status: "confirm", next: "/es/audits/new" });
-    expect(calls[0]).toEqual({ method: "signUp", args: ["a@example.com", "correct horse", `${APP}/auth/callback?locale=es&next=%2Fes%2Faudits%2Fnew`] });
+    expect(calls[0]).toEqual({ method: "signUp", args: ["a@example.com", "correct horse"] });
   });
 
   it("goes straight on when sign-up returns a session (confirmation disabled, or the local dev backend)", async () => {
     const { provider } = fakeProvider({ signUp: async () => "signed_in" });
-    expect(await passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP }, { ...base, intent: "signup", next: "/en/audits" }))
+    expect(await passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures }, { ...base, intent: "signup", next: "/en/audits" }))
       .toEqual({ kind: "redirect", to: "/en/audits" });
   });
 });
 
 describe("requestPasswordReset", () => {
-  it("always reports the email as sent (no account enumeration) and returns via the callback to the reset page", async () => {
+  it("always reports the email as sent (no account enumeration)", async () => {
     const { provider, calls } = fakeProvider({ sendReset: async () => { throw new Error("no such user"); } });
-    expect(await requestPasswordReset({ provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP }, { email: "a@example.com", locale: "en" }))
+    expect(await requestPasswordReset({ provider, rateLimited: notLimited, passwordFailures: noFailures }, { email: "a@example.com" }))
       .toEqual({ kind: "back", status: "reset_sent" });
     const ok = fakeProvider();
-    await requestPasswordReset({ provider: ok.provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP }, { email: "a@example.com", locale: "en" });
-    expect(ok.calls[0]).toEqual({ method: "sendReset", args: ["a@example.com", `${APP}/auth/callback?locale=en&next=%2Fen%2Freset-password`] });
+    await requestPasswordReset({ provider: ok.provider, rateLimited: notLimited, passwordFailures: noFailures }, { email: "a@example.com" });
+    expect(ok.calls[0]).toEqual({ method: "sendReset", args: ["a@example.com"] });
     expect(calls).toHaveLength(0);
   });
 
   it("is rate limited per email and validates the address", async () => {
     const { provider, calls } = fakeProvider();
-    expect(await requestPasswordReset({ provider, rateLimited: async () => "limited" as const, passwordFailures: noFailures, appUrl: APP }, { email: "a@example.com", locale: "en" }))
+    expect(await requestPasswordReset({ provider, rateLimited: async () => "limited" as const, passwordFailures: noFailures }, { email: "a@example.com" }))
       .toEqual({ kind: "back", status: "rate" });
-    expect(await requestPasswordReset({ provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP }, { email: "bad", locale: "en" }))
+    expect(await requestPasswordReset({ provider, rateLimited: notLimited, passwordFailures: noFailures }, { email: "bad" }))
       .toEqual({ kind: "back", status: "error" });
     expect(calls).toHaveLength(0);
   });
 });
 
 describe("updatePassword", () => {
-  it("needs a signed-in (recovery) session, a valid password, and is rate limited per user", async () => {
+  it("needs a signed-in session, a valid password, and is rate limited per user", async () => {
     const { provider, calls } = fakeProvider();
-    const deps = { provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP };
+    const deps = { provider, rateLimited: notLimited, passwordFailures: noFailures };
     const ok = { mayChange: true };
     expect(await updatePassword(deps, { userId: null, password: "new password", locale: "en", ...ok })).toEqual({ kind: "redirect", to: "/en/signin?status=expired" });
     expect(await updatePassword(deps, { userId: "u1", password: "short", locale: "en", ...ok })).toEqual({ kind: "back", status: "weak" });
@@ -204,7 +202,7 @@ describe("password change needs a recent sign-in", () => {
 
   it("updatePassword sends an older session back to sign in again, then to the reset page", async () => {
     const { provider, calls } = fakeProvider();
-    const deps = { provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP };
+    const deps = { provider, rateLimited: notLimited, passwordFailures: noFailures };
     expect(await updatePassword(deps, { userId: "u1", password: "new password", locale: "es", mayChange: false }))
       .toEqual({ kind: "redirect", to: "/es/signin?status=reauth&next=%2Fes%2Freset-password" });
     expect(calls).toHaveLength(0);
@@ -227,45 +225,14 @@ describe("MemoryPasswordProvider (development only)", () => {
   });
 });
 
-describe("SupabasePasswordProvider", () => {
-  const auth = (result: { data?: unknown; error?: { code?: string; status?: number } | null }) => {
-    const calls: { method: string; args: unknown[] }[] = [];
-    const f = (method: string) => async (...args: unknown[]) => (calls.push({ method, args }), { data: result.data ?? {}, error: result.error ?? null });
-    return { calls, client: { auth: { signInWithPassword: f("signInWithPassword"), signUp: f("signUp"), resetPasswordForEmail: f("resetPasswordForEmail"), updateUser: f("updateUser") } } };
-  };
-
-  it("maps Supabase Auth error codes", async () => {
-    expect(await new SupabasePasswordProvider(auth({}).client).signIn("a@x.co", "pw")).toBe("ok");
-    expect(await new SupabasePasswordProvider(auth({ error: { code: "invalid_credentials", status: 400 } }).client).signIn("a@x.co", "pw")).toBe("invalid");
-    expect(await new SupabasePasswordProvider(auth({ error: { code: "email_not_confirmed", status: 400 } }).client).signIn("a@x.co", "pw")).toBe("unconfirmed");
-    expect(await new SupabasePasswordProvider(auth({ error: { code: "unexpected_failure", status: 500 } }).client).signIn("a@x.co", "pw")).toBe("error");
-    expect(await new SupabasePasswordProvider(auth({ error: { code: "weak_password", status: 422 } }).client).signUp("a@x.co", "pw", "r")).toBe("weak");
-    expect(await new SupabasePasswordProvider(auth({ error: { code: "user_already_exists", status: 422 } }).client).signUp("a@x.co", "pw", "r")).toBe("confirm");
-    expect(await new SupabasePasswordProvider(auth({ error: { code: "weak_password", status: 422 } }).client).updatePassword("pw")).toBe("weak");
-  });
-
-  it("signs up with the confirmation redirect and reports whether a session came back", async () => {
-    const pending = auth({ data: { user: { id: "u" }, session: null } });
-    expect(await new SupabasePasswordProvider(pending.client).signUp("a@x.co", "pw", "https://app.test/auth/callback")).toBe("confirm");
-    expect(pending.calls[0]).toEqual({ method: "signUp", args: [{ email: "a@x.co", password: "pw", options: { emailRedirectTo: "https://app.test/auth/callback" } }] });
-    expect(await new SupabasePasswordProvider(auth({ data: { user: { id: "u" }, session: { access_token: "t" } } }).client).signUp("a@x.co", "pw", "r")).toBe("signed_in");
-  });
-
-  it("sends the reset email with the redirect", async () => {
-    const a = auth({});
-    await new SupabasePasswordProvider(a.client).sendReset("a@x.co", "https://app.test/auth/callback?next=%2Fen%2Freset-password");
-    expect(a.calls[0]).toEqual({ method: "resetPasswordForEmail", args: ["a@x.co", { redirectTo: "https://app.test/auth/callback?next=%2Fen%2Freset-password" }] });
-  });
-});
-
 describe("passwordSignIn: leaked-password check on sign-up", () => {
   it("refuses a password found in breach data before creating the account; sign-in is not checked", async () => {
     const { provider, calls } = fakeProvider();
     const leakedPassword = async (p: string) => p === "correct horse";
-    expect(await passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP, leakedPassword }, { ...base, intent: "signup", next: null }))
+    expect(await passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures, leakedPassword }, { ...base, intent: "signup", next: null }))
       .toEqual({ kind: "back", status: "leaked", next: "/en/audits/new" });
     expect(calls).toEqual([]);
-    await passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP, leakedPassword }, { ...base, intent: "signin", next: null });
+    await passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures, leakedPassword }, { ...base, intent: "signin", next: null });
     expect(calls.map((c) => c.method)).toEqual(["signIn"]);
   });
 });

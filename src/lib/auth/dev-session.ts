@@ -1,6 +1,6 @@
 /**
  * Local-only sign-in for LF_BACKEND=memory (dev and e2e): an HMAC-signed email cookie, no email sent.
- * Never used with Supabase; production refuses the memory backend.
+ * Never used with Neon Auth; anything but SITE_ENV=development refuses the memory backend.
  */
 export const DEV_SESSION_COOKIE = "lf_dev_session";
 

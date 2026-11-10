@@ -45,7 +45,7 @@ async function CodeResetForm({ locale, status }: { locale: Locale; status: strin
   );
 }
 
-/** Reached from the reset email through /auth/callback, which opened a recovery session. */
+/** Development-only memory backend: a recently signed-in session sets a new password directly. */
 async function ResetForm({ locale, searchParams }: { locale: Locale; searchParams: PageProps<"/[locale]/reset-password">["searchParams"] }) {
   const p = getDictionary(locale).signup.password;
   if (serverEnv().backend === "neon") return <CodeResetForm locale={locale} status={(await searchParams).status} />;

@@ -1,7 +1,9 @@
 /**
- * RLS and paywall tests against the real migration SQL, on PGlite (in-process Postgres).
- * Covers: owner isolation, locked findings/letters, no renter writes, server-only tables,
- * Storage folder isolation, the fee-policy check, and the Stripe unlock function.
+ * The Neon migration's SQL, on PGlite (in-process Postgres): the Stripe unlock and refund functions, the rate
+ * limiter, the daily audit cap, save_scan_result, the fee constraints, and that the Data API roles (`anonymous`,
+ * `authenticated`) can reach nothing even though the Data API grants them new public objects by default. On Neon
+ * the app server is the only database client, and it scopes every owner query by user id (see
+ * neon-repository.ts, covered on a dev branch by neon-repository.integration.test.ts).
  */
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -16,8 +18,9 @@ const AUDIT_B = "10000000-0000-4000-8000-00000000000b";
 
 let db: PGlite;
 
-async function as<T>(role: "anon" | "authenticated" | "service_role", userId: string | null, fn: () => Promise<T>): Promise<T> {
-  await db.query(`select set_config('request.jwt.claim.sub', $1, false)`, [userId ?? ""]);
+/** "owner" is the app server (the database owner role); the others are the Data API roles. */
+async function as<T>(role: "anonymous" | "authenticated" | "owner", _userId: string | null, fn: () => Promise<T>): Promise<T> {
+  if (role === "owner") return fn();
   await db.exec(`set role ${role}`);
   try {
     return await fn();
@@ -31,8 +34,8 @@ const rows = async (sql: string, params: unknown[] = []) => (await db.query<Reco
 async function seed() {
   await db.exec(`
     truncate public.rate_limits, public.payment_reviews, public.stripe_events, public.payments, public.letters, public.findings, public.extractions,
-      public.documents, public.audits, public.profiles, auth.users, storage.objects cascade;
-    insert into auth.users (id, email) values ('${A}', 'a@example.test'), ('${B}', 'b@example.test');
+      public.documents, public.audits, public.profiles cascade;
+    insert into public.profiles (user_id, email) values ('${A}', 'a@example.test'), ('${B}', 'b@example.test');
     insert into public.audits (id, user_id, status, jurisdiction_key, total_owed_cents, item_count, lines_scanned, fee_cents)
       values ('${AUDIT_A}', '${A}', 'preview_ready', 'san-diego-ca', 64000, 5, 37, 9600),
              ('${AUDIT_B}', '${B}', 'preview_ready', 'austin-tx', 10000, 1, 12, 1500);
@@ -45,19 +48,25 @@ async function seed() {
     insert into public.extractions (audit_id, user_id, source, data) values ('${AUDIT_A}', '${A}', 'demo', '{}');
     insert into public.payments (audit_id, user_id, stripe_checkout_session_id, amount_cents)
       values ('${AUDIT_A}', '${A}', 'cs_test_a', 9600), ('${AUDIT_B}', '${B}', 'cs_test_b', 1500);
-    insert into storage.objects (bucket_id, name) values ('documents', '${A}/${AUDIT_A}/doc.pdf'), ('documents', '${B}/${AUDIT_B}/doc.pdf');
   `);
 }
 
 const pay = (eventId: string, session: string, audit: string, amount: number, paymentIntent = `pi_${session}`) =>
-  as("service_role", null, async () =>
+  as("owner", null, async () =>
     (await rows(`select public.apply_checkout_paid($1, 'checkout.session.completed', $2, $3, $4, 'usd', $5) as r`,
       [eventId, session, audit, amount, paymentIntent]))[0].r as string);
 
 beforeAll(async () => {
   db = new PGlite();
-  await db.exec(readFileSync(path.join(ROOT, "src/lib/db/supabase-stub.sql"), "utf8"));
-  const dir = path.join(ROOT, "supabase/migrations");
+  // What the Neon Data API sets up: its roles, schema usage and default grants on new public objects.
+  await db.exec(`
+    create role anonymous nologin;
+    create role authenticated nologin;
+    grant usage on schema public to anonymous, authenticated;
+    alter default privileges in schema public grant all on tables to authenticated;
+    alter default privileges in schema public grant all on functions to authenticated;
+  `);
+  const dir = path.join(ROOT, "neon/migrations");
   for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
     await db.exec(readFileSync(path.join(dir, file), "utf8"));
   }
@@ -66,49 +75,42 @@ beforeAll(async () => {
 afterAll(async () => db?.close());
 beforeEach(seed);
 
-describe("owner isolation", () => {
-  it("a renter sees only their own audit summary and profile", async () => {
-    const audits = await as("authenticated", A, () => rows("select id, total_owed_cents, fee_cents from public.audits"));
-    expect(audits).toEqual([{ id: AUDIT_A, total_owed_cents: 64000, fee_cents: 9600 }]);
-    const profiles = await as("authenticated", A, () => rows("select user_id from public.profiles"));
-    expect(profiles).toEqual([{ user_id: A }]);
-  });
+describe("Data API roles reach nothing", () => {
+  const TABLES = ["profiles", "audits", "documents", "extractions", "findings", "letters", "payments", "stripe_events", "payment_reviews", "rate_limits"];
 
-  it("anon can read nothing", async () => {
-    await expect(as("anon", null, () => rows("select * from public.audits"))).rejects.toThrow(/permission denied/);
-    await expect(as("anon", null, () => rows("select * from public.findings"))).rejects.toThrow(/permission denied/);
-  });
-
-  it("server-only tables are closed to renters", async () => {
-    await expect(as("authenticated", A, () => rows("select * from public.extractions"))).rejects.toThrow(/permission denied/);
-    await expect(as("authenticated", A, () => rows("select * from public.stripe_events"))).rejects.toThrow(/permission denied/);
-    await expect(as("authenticated", A, () => rows("select * from public.payment_reviews"))).rejects.toThrow(/permission denied/);
-  });
-});
-
-describe("paywall", () => {
-  it("hides findings and letters until the audit is unlocked", async () => {
-    expect(await as("authenticated", A, () => rows("select * from public.findings"))).toEqual([]);
-    expect(await as("authenticated", A, () => rows("select * from public.letters"))).toEqual([]);
-  });
-
-  it("shows only the owner's findings and letters after a verified unlock", async () => {
-    expect(await pay("evt_1", "cs_test_a", AUDIT_A, 9600)).toBe("unlocked");
-    const findings = await as("authenticated", A, () => rows("select audit_id from public.findings"));
-    expect(findings).toEqual([{ audit_id: AUDIT_A }]);
-    expect(await as("authenticated", A, () => rows("select audit_id from public.letters"))).toEqual([{ audit_id: AUDIT_A }]);
-    expect(await as("authenticated", B, () => rows("select * from public.findings"))).toEqual([]);
-  });
-
-  it("renters cannot unlock, edit fees or status, or insert findings", async () => {
+  it("no table can be read or written by anonymous or authenticated", async () => {
+    for (const role of ["anonymous", "authenticated"] as const) {
+      for (const table of TABLES) {
+        await expect(as(role, A, () => rows(`select * from public.${table}`))).rejects.toThrow(/permission denied/);
+      }
+    }
     await expect(as("authenticated", A, () => rows(`update public.audits set status = 'unlocked', unlocked_at = now() where id = $1`, [AUDIT_A])))
-      .rejects.toThrow(/permission denied/);
-    await expect(as("authenticated", A, () => rows(`update public.audits set fee_cents = 0 where id = $1`, [AUDIT_A])))
       .rejects.toThrow(/permission denied/);
     await expect(as("authenticated", A, () => rows(`insert into public.audits (user_id, jurisdiction_key) values ($1, 'san-diego-ca')`, [A])))
       .rejects.toThrow(/permission denied/);
+  });
+
+  it("no function can be called by them, and every definer function has an empty search_path", async () => {
+    const fns = await rows(`select p.oid::regprocedure::text as sig, p.prosecdef as definer, p.proconfig as config,
+        has_function_privilege('authenticated', p.oid, 'execute') as auth_exec, has_function_privilege('anonymous', p.oid, 'execute') as anon_exec
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' order by 1`);
+    expect(fns.length).toBeGreaterThanOrEqual(7);
+    for (const f of fns) {
+      expect({ sig: f.sig, auth: f.auth_exec, anon: f.anon_exec }).toEqual({ sig: f.sig, auth: false, anon: false });
+      expect({ sig: f.sig, config: f.config }).toEqual({ sig: f.sig, config: ['search_path=""'] });
+    }
+    expect(fns.filter((f) => !f.definer).map((f) => f.sig)).toEqual(["set_updated_at()"]);
     await expect(as("authenticated", A, () => rows(`select public.apply_checkout_paid('evt_x', 't', 'cs_test_a', $1, 9600, 'usd', null)`, [AUDIT_A])))
       .rejects.toThrow(/permission denied/);
+  });
+
+  it("objects created later are not granted to them either (default privileges revoked)", async () => {
+    await db.exec("create table public.later (x int)");
+    try {
+      await expect(as("authenticated", A, () => rows("select * from public.later"))).rejects.toThrow(/permission denied/);
+    } finally {
+      await db.exec("drop table public.later");
+    }
   });
 });
 
@@ -136,7 +138,7 @@ describe("apply_checkout_paid", () => {
     expect(await pay("evt_6", "cs_test_a", AUDIT_A, 9600)).toBe("unlocked");
     expect(await pay("evt_7", "cs_test_a2", AUDIT_A, 9600)).toBe("duplicate_payment");
     expect(await rows("select event_id, reason from public.payment_reviews")).toEqual([{ event_id: "evt_7", reason: "duplicate_payment" }]);
-    expect(await as("service_role", null, () => rows("select public.record_refund('evt_7', 're_test_1', 9600) as ok"))).toEqual([{ ok: true }]);
+    expect(await as("owner", null, () => rows("select public.record_refund('evt_7', 're_test_1', 9600) as ok"))).toEqual([{ ok: true }]);
     expect((await rows("select status from public.payments where stripe_checkout_session_id = 'cs_test_a2'"))[0].status).toBe("refunded");
     expect((await rows("select refund_id from public.payment_reviews where event_id = 'evt_7'"))[0].refund_id).toBe("re_test_1");
     await expect(as("authenticated", A, () => rows("select public.record_refund('evt_7', 're_x', 1)"))).rejects.toThrow(/permission denied/);
@@ -144,7 +146,7 @@ describe("apply_checkout_paid", () => {
 
   it("never unlocks on a missing currency (NULL-safe comparisons)", async () => {
     const call = (eventId: string, amount: number | null, currency: string | null) =>
-      as("service_role", null, async () =>
+      as("owner", null, async () =>
         (await rows(`select public.apply_checkout_paid($1, 'checkout.session.completed', 'cs_test_a', $2, $3, $4, 'pi_null') as r`,
           [eventId, AUDIT_A, amount, currency]))[0].r as string);
     expect(await call("evt_n1", 9600, null)).toBe("amount_mismatch");
@@ -152,7 +154,7 @@ describe("apply_checkout_paid", () => {
   });
 
   it("never unlocks on a missing amount", async () => {
-    const r = await as("service_role", null, async () =>
+    const r = await as("owner", null, async () =>
       (await rows(`select public.apply_checkout_paid('evt_n2', 'checkout.session.completed', 'cs_test_a', $1, null, 'usd', 'pi_null2') as r`, [AUDIT_A]))[0].r);
     expect(r).toBe("amount_mismatch");
     expect((await rows("select status from public.audits where id = $1", [AUDIT_A]))[0].status).toBe("preview_ready");
@@ -180,7 +182,7 @@ describe("apply_checkout_paid", () => {
 
 describe("rate_limit_hit (fixed-window limiter)", () => {
   const hit = (keys: string[], limit: number, at = "2026-11-10T08:00:05Z") =>
-    as("service_role", null, async () =>
+    as("owner", null, async () =>
       (await rows("select public.rate_limit_hit($1::text[], $2, 60, $3::timestamptz) as limited", [keys, limit, at]))[0].limited);
 
   it("counts every key with an atomic upsert-increment and limits once any key is over", async () => {
@@ -201,7 +203,7 @@ describe("rate_limit_hit (fixed-window limiter)", () => {
 
   it("rate_limit_forgive takes one hit back in the current window, never below zero and never creating a row", async () => {
     const forgive = (keys: string[], at = "2026-11-10T08:00:05Z") =>
-      as("service_role", null, () => rows("select public.rate_limit_forgive($1::text[], 900, $2::timestamptz)", [keys, at]));
+      as("owner", null, () => rows("select public.rate_limit_forgive($1::text[], 900, $2::timestamptz)", [keys, at]));
     expect(await hit(["password_fail:subject:a"], 5)).toBe(false);
     await forgive(["password_fail:subject:a"]);
     await forgive(["password_fail:subject:a"]);
@@ -212,15 +214,15 @@ describe("rate_limit_hit (fixed-window limiter)", () => {
 
   it("is server-only: no renter can call it or read the table", async () => {
     await expect(as("authenticated", A, () => rows("select public.rate_limit_hit(array['x'], 1, 60, now())"))).rejects.toThrow(/permission denied/);
-    await expect(as("anon", null, () => rows("select public.rate_limit_hit(array['x'], 1, 60, now())"))).rejects.toThrow(/permission denied/);
+    await expect(as("anonymous", null, () => rows("select public.rate_limit_hit(array['x'], 1, 60, now())"))).rejects.toThrow(/permission denied/);
     await expect(as("authenticated", A, () => rows("select * from public.rate_limits"))).rejects.toThrow(/permission denied/);
   });
 });
 
 describe("insert_audit_within_cap (N4)", () => {
   const insert = (id: string, limit: number) =>
-    as("service_role", null, async () => (await rows(
-      `select public.insert_audit_within_cap($1, $2, 'en', 'san-diego-ca', null, null, null, now() - interval '24 hours', $3) as ok`,
+    as("owner", null, async () => (await rows(
+      `select public.insert_audit_within_cap($1, $2, 'en', 'san-diego-ca', null, null, null, now() - interval '24 hours', $3, 'b@example.test') as ok`,
       [id, B, limit]))[0].ok);
 
   it("inserts only while the user is under the cap, serialized per user with an advisory lock", async () => {
@@ -234,14 +236,14 @@ describe("insert_audit_within_cap (N4)", () => {
 
   it("is service-role only", async () => {
     await expect(as("authenticated", B, () => rows(
-      `select public.insert_audit_within_cap($1, $2, 'en', 'san-diego-ca', null, null, null, now(), 10)`, ["30000000-0000-4000-8000-000000000003", B])))
+      `select public.insert_audit_within_cap($1, $2, 'en', 'san-diego-ca', null, null, null, now(), 10, 'b@example.test')`, ["30000000-0000-4000-8000-000000000003", B])))
       .rejects.toThrow(/permission denied/);
   });
 });
 
 describe("refund policy (Hector, 2026-11-10)", () => {
   const refund = (eventId: string, refundId: string, amount: number) =>
-    as("service_role", null, async () => (await rows("select public.record_refund($1, $2, $3) as ok", [eventId, refundId, amount]))[0].ok);
+    as("owner", null, async () => (await rows("select public.record_refund($1, $2, $3) as ok", [eventId, refundId, amount]))[0].ok);
   const review = async (eventId: string) =>
     (await rows(`select reason, refund_id, refund_amount_cents, refunded_at is not null as refunded, resolved_at is not null as resolved
       from public.payment_reviews where event_id = $1`, [eventId]))[0];
@@ -300,7 +302,7 @@ describe("save_scan_result", () => {
   });
 
   it("stores findings, letters and the summary in one call", async () => {
-    await as("service_role", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result()]));
+    await as("owner", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result()]));
     const [audit] = await rows("select status, total_owed_cents, fee_cents from public.audits where id = $1", [AUDIT_C]);
     expect(audit).toEqual({ status: "preview_ready", total_owed_cents: 15000, fee_cents: 2250 });
     const [finding] = await rows("select line_numbers, lease_ref from public.findings where audit_id = $1", [AUDIT_C]);
@@ -308,16 +310,16 @@ describe("save_scan_result", () => {
   });
 
   it("rolls back when findings do not add up or the fee is not 15%", async () => {
-    await expect(as("service_role", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result({ totalOwedCents: 20000, feeCents: 3000 })])))
+    await expect(as("owner", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result({ totalOwedCents: 20000, feeCents: 3000 })])))
       .rejects.toThrow(/do not add up/);
-    await expect(as("service_role", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result({ feeCents: 100 })])))
+    await expect(as("owner", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result({ feeCents: 100 })])))
       .rejects.toThrow(/audits_fee_matches_policy/);
     expect(await rows("select * from public.findings where audit_id = $1", [AUDIT_C])).toEqual([]);
   });
 
   it("only finishes a scan as preview_ready, clean, or unlocked free when under 50 cents is owed", async () => {
     const save = (overrides: Record<string, unknown>) =>
-      as("service_role", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result(overrides)]));
+      as("owner", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result(overrides)]));
     const finding = (owed: number) => [{ position: 0, category: "unauthorized_fee", description: "Mystery", firstDate: "2026-02-01", lastDate: "2026-02-01",
       lineNumbers: [1], chargedCents: owed, allowedCents: 0, owedCents: owed, basis: "lease", citation: null, sourceUrl: null, leaseRef: null, lawNotes: [] }];
     await expect(save({ status: "unlocked", unlockedAt: "2026-11-09T00:00:00Z" })).rejects.toThrow(/may not finish as unlocked/);
@@ -336,7 +338,7 @@ describe("save_scan_result", () => {
   });
 
   it("charges the 50-cent minimum when 15% is less", async () => {
-    await as("service_role", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C,
+    await as("owner", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C,
       result({ totalOwedCents: 300, feeCents: 50, findings: [{ position: 0, category: "unauthorized_fee", description: "Mystery", firstDate: "2026-02-01",
         lastDate: "2026-02-01", lineNumbers: [1], chargedCents: 300, allowedCents: 0, owedCents: 300, basis: "lease", citation: null, sourceUrl: null, leaseRef: null, lawNotes: [] }] })]));
     expect((await rows("select status, fee_cents, free_unlock_below_minimum from public.audits where id = $1", [AUDIT_C]))[0])
@@ -344,7 +346,7 @@ describe("save_scan_result", () => {
   });
 
   it("refuses an audit that is not processing, and renters cannot call it", async () => {
-    await expect(as("service_role", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_A, result()]))).rejects.toThrow(/not processing/);
+    await expect(as("owner", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_A, result()]))).rejects.toThrow(/not processing/);
     await expect(as("authenticated", A, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result()]))).rejects.toThrow(/permission denied/);
   });
 });
@@ -369,20 +371,5 @@ describe("constraints", () => {
     await db.query(`update public.audits set status = 'unlocked', unlocked_at = now(), total_owed_cents = 49, fee_cents = 0 where id = $1`, [AUDIT_A]);
     expect(await rows(`select id from public.audits where free_unlock_below_minimum`)).toEqual([{ id: AUDIT_A }]);
     expect(await rows(`select indexname from pg_indexes where indexname = 'audits_free_unlock_below_minimum_idx'`)).toHaveLength(1);
-  });
-});
-
-describe("storage", () => {
-  it("documents bucket is private and owners read only their own folder", async () => {
-    const [bucket] = await rows("select public, file_size_limit from storage.buckets where id = 'documents'");
-    expect(bucket).toEqual({ public: false, file_size_limit: 15728640 });
-    const objects = await as("authenticated", A, () => rows("select name from storage.objects"));
-    expect(objects).toEqual([{ name: `${A}/${AUDIT_A}/doc.pdf` }]);
-    expect(await as("anon", null, () => rows("select name from storage.objects"))).toEqual([]);
-  });
-
-  it("renters cannot upload directly", async () => {
-    await expect(as("authenticated", A, () => rows(`insert into storage.objects (bucket_id, name) values ('documents', $1)`, [`${A}/x/y.pdf`])))
-      .rejects.toThrow(/row-level security/);
   });
 });
