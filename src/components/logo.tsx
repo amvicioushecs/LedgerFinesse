@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export function Logo({ href }: { href: string }) {
   return (
-    <Link href={href} className="flex items-center gap-2.5" aria-label="LedgerFinesse home">
+    <Link href={href} className="tap-target gap-2.5 px-0">
       <span className="grid size-8 place-items-center rounded-md bg-forest text-sm font-bold text-white" aria-hidden>
         LF
       </span>

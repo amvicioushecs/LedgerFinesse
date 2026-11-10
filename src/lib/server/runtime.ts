@@ -127,7 +127,7 @@ export async function pendingRecoveryEmail(): Promise<string | null> {
   const held = env.backend === "supabase" ? await heldRecovery() : null;
   if (!held) return null;
   if (heldSessionExpired(held, Math.floor(Date.now() / 1000))) {
-    (await cookies()).delete(RECOVERY_PENDING_COOKIE);
+    // Don't delete cookies during render (Next throws). The cookie expires at maxAge or is cleared on POST.
     await recoveryConfirmDeps().revoke(held);
     return null;
   }

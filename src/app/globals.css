@@ -10,7 +10,7 @@
   --color-mint: #dce9e1;
   --color-butter: #fff0c8;
   --color-alert: #a63d2f;
-  --color-muted: #5d6d66;
+  --color-muted: #52625b;
   --color-sage: #9cad9f;
   --color-line: #cbd5ce;
   --color-cream: #fbfaf6;
@@ -79,6 +79,41 @@ body {
 .btn:disabled {
   opacity: 0.6;
   pointer-events: none;
+}
+
+.tap-target {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding-inline: 12px;
+}
+.tap-target:focus-visible {
+  outline: 2px solid var(--color-forest);
+  outline-offset: 2px;
+}
+header .tap-target {
+  margin-block: -12px;
+  /* Don't add extra inline padding in the tight header row; min 44px still applies. */
+  padding-inline: 0;
+}
+header [data-testid="language-switcher"] .tap-target {
+  padding-inline: 12px;
+}
+
+/* Standalone markdown/source links that are not running text (Design Desk 44px hit area). */
+.markdown-body p:has(> a:only-child) a,
+.markdown-body p:has(> strong:only-child) a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding-inline: 12px;
+}
+.markdown-body p:has(> a:only-child) a:focus-visible,
+.markdown-body p:has(> strong:only-child) a:focus-visible {
+  outline: 2px solid var(--color-forest);
+  outline-offset: 2px;
 }
 
 .pill {

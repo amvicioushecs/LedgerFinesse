@@ -10,7 +10,7 @@ import { JsonLd } from "@/components/json-ld";
 import { alternateOf, getPost, listPosts } from "@/lib/blog";
 import { alternatesFor, isLocale, type Locale } from "@/lib/i18n/locales";
 import { currentLocale } from "@/lib/i18n/server";
-import { siteUrl } from "@/lib/seo";
+import { openGraphFor, siteUrl } from "@/lib/seo";
 import { breadcrumbLd, organizationLd } from "@/lib/structured-data";
 
 export async function generateStaticParams() {
@@ -36,7 +36,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: post.title,
     description: post.description,
     alternates: { canonical: self, languages },
-    openGraph: { type: "article", title: post.title, description: post.description, url: self, publishedTime: post.date, locale },
+    openGraph: openGraphFor(locale, `/blog/${post.slug}`, { type: "article", title: post.title, description: post.description, publishedTime: post.date }),
     robots: post.draft ? { index: false, follow: true } : undefined,
   };
 }
@@ -79,13 +79,13 @@ export default async function BlogPostPage({ params }: Props) {
         </p>
       ) : null}
       <nav aria-label="Breadcrumb" className="text-sm text-muted">
-        <Link href={`/${locale}/blog`} className="hover:underline">{t.blog.back}</Link>
+        <Link href={`/${locale}/blog`} className="tap-target hover:underline">{t.blog.back}</Link>
       </nav>
       <h1 className="font-display mt-4 text-4xl leading-tight font-bold sm:text-5xl">{post.title}</h1>
       <p className="mt-3 text-sm text-muted">
         {t.blog.published} <time dateTime={post.date}>{post.date}</time>
       </p>
-      <div className="mt-8 space-y-4 leading-relaxed [&_a]:font-semibold [&_a]:underline [&_blockquote]:border-l-4 [&_blockquote]:border-line [&_blockquote]:pl-4 [&_h2]:font-display [&_h2]:mt-10 [&_h2]:text-2xl [&_h2]:font-bold [&_h3]:mt-6 [&_h3]:font-bold [&_li]:ml-5 [&_ol]:list-decimal [&_table]:w-full [&_table]:text-sm [&_td]:border [&_td]:border-line [&_td]:p-2 [&_th]:border [&_th]:border-line [&_th]:p-2 [&_ul]:list-disc">
+      <div className="markdown-body mt-8 space-y-4 leading-relaxed [&_a]:font-semibold [&_a]:underline [&_blockquote]:border-l-4 [&_blockquote]:border-line [&_blockquote]:pl-4 [&_h2]:font-display [&_h2]:mt-10 [&_h2]:text-2xl [&_h2]:font-bold [&_h3]:mt-6 [&_h3]:font-bold [&_li]:ml-5 [&_ol]:list-decimal [&_table]:w-full [&_table]:text-sm [&_td]:border [&_td]:border-line [&_td]:p-2 [&_th]:border [&_th]:border-line [&_th]:p-2 [&_ul]:list-disc">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
@@ -105,7 +105,7 @@ export default async function BlogPostPage({ params }: Props) {
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm">
           {post.sources.map((s) => (
             <li key={s.url}>
-              <a href={s.url} target="_blank" rel="noopener noreferrer" className="underline">{s.title}</a>
+              <a href={s.url} target="_blank" rel="noopener noreferrer" className="tap-target underline">{s.title}</a>
             </li>
           ))}
         </ol>

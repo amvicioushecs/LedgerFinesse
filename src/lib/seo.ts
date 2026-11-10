@@ -14,3 +14,25 @@ export function localeAlternates(locale: Locale, path: string): Metadata["altern
 
 /** Pages that must never be indexed (account, checkout, audits). */
 export const PRIVATE_ROBOTS: Metadata["robots"] = { index: false, follow: false };
+
+/** Open Graph locale tags use a region subtag (`en_US`), not the site locale alone. */
+export function ogLocale(locale: Locale): "en_US" | "es_ES" {
+  return locale === "es" ? "es_ES" : "en_US";
+}
+
+/** Absolute og:url from the app URL, plus the site name and regional locale required on every public page. */
+export function openGraphFor(
+  locale: Locale,
+  path: string,
+  extras?: { type?: "website" | "article"; title?: string; description?: string; publishedTime?: string },
+): NonNullable<Metadata["openGraph"]> {
+  return {
+    type: extras?.type ?? "website",
+    url: `${siteUrl()}${localizePath(locale, path)}`,
+    siteName: "LedgerFinesse",
+    locale: ogLocale(locale),
+    ...(extras?.title !== undefined ? { title: extras.title } : {}),
+    ...(extras?.description !== undefined ? { description: extras.description } : {}),
+    ...(extras?.publishedTime !== undefined ? { publishedTime: extras.publishedTime } : {}),
+  };
+}

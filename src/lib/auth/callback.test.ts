@@ -104,6 +104,12 @@ describe("recovery confirm step", () => {
     expect(await confirmRecovery(d, { action: "continue", locale: "en" })).toBe("/en/signin?status=expired");
     expect(calls).toEqual(["take"]);
   });
+
+  it("held session with no issuedAt: revokes and treats the link as expired", async () => {
+    const { d, calls } = confirmDeps({ accessToken: "at", refreshToken: "rt" });
+    expect(await confirmRecovery(d, { action: "continue", locale: "en", nowSeconds: 1_800_000_000 })).toBe("/en/signin?status=expired");
+    expect(calls).toEqual(["take", "revoke:at"]);
+  });
 });
 
 describe("held recovery session cookie value", () => {

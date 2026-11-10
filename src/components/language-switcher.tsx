@@ -10,7 +10,7 @@ const SHORT: Record<Locale, string> = { en: "EN", es: "ES" };
 /** EN/ES links to `path` in each language; remembers the choice in a cookie. */
 export function LanguageLinks({ locale, label, path }: { locale: Locale; label: string; path: string }) {
   return (
-    <nav aria-label={label} className="flex items-center rounded-md border border-line text-xs font-bold" data-testid="language-switcher">
+    <nav aria-label={label} className="flex items-center gap-2 text-xs font-bold" data-testid="language-switcher">
       {LOCALES.map((l) => (
         <Link
           key={l}
@@ -22,7 +22,7 @@ export function LanguageLinks({ locale, label, path }: { locale: Locale; label: 
           onClick={() => {
             document.cookie = `lf_locale=${l}; path=/; max-age=31536000; samesite=lax`;
           }}
-          className={`px-2.5 py-2 ${l === locale ? "bg-forest text-white" : "text-ink hover:bg-mint"} first:rounded-l-md last:rounded-r-md`}
+          className={`tap-target justify-center rounded-md border border-line ${l === locale ? "bg-forest text-white underline underline-offset-2" : "text-ink hover:bg-mint"}`}
         >
           {SHORT[l]}
         </Link>

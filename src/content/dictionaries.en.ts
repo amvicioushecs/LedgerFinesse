@@ -8,7 +8,7 @@ export const en = {
   },
   nav: { startScan: "Start Free Scan", blog: "Blog", sample: "Sample audit", signIn: "Sign in", signOut: "Sign out", myAudits: "My audits", language: "Language", switchTo: "Español" },
   disclaimer:
-    "LedgerFinesse is not a law firm and provides automated OCR accounting analysis and dispute letter templates, not formal legal representation.",
+    "LedgerFinesse is not a law firm and provides automated OCR accounting analysis and dispute letter templates, not formal legal representation. Not legal advice.",
   footer: { tagline: "Free OCR Scan · 15% Only When Money Is Owed ($0.50 min) · © 2026 LedgerFinesse" },
   hero: {
     eyebrow: "It's Time To Hold Them Accountable",
@@ -186,6 +186,7 @@ export const en = {
     feeMinimumNote: "Heads up: on a small amount, the minimum can be a big share of what you're owed, up to all of it. Only unlock if the report is worth it to you.",
     keep: "You keep {net} of {total}",
     pay: "Pay {fee} & Unlock Dashboard",
+    payAgain: "Try payment again",
     paying: "Opening secure checkout…",
     securedBy: "Secure checkout by Stripe. We never see your card number.",
     zeroTitle: "Good news: Your ledger matches your lease ($0.00 owed).",

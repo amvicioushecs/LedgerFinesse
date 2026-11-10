@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Suspense } from "react";
 import { fill, getDictionary } from "@/content/dictionaries";
 import { feeGateCopy } from "@/content/fee-copy";
 import { WaitForStatus } from "@/components/audit/wait-for-status";
 import { Disclaimer } from "@/components/disclaimer";
 import { ReportView } from "@/components/report/report-view";
-import { getFreeResult, getUnlockedReport, isFreeUnlockBelowMinimum } from "@/lib/audits/service";
+import { getFreeResult, getUnlockedReport, isFreeUnlockBelowMinimum, type FreeResult } from "@/lib/audits/service";
 import type { Locale } from "@/lib/i18n/locales";
 import { currentLocale } from "@/lib/i18n/server";
 import { isUuid } from "@/lib/ids";
 import { formatUsd } from "@/lib/money";
-import { auditDeps, getCurrentUser } from "@/lib/server/runtime";
+import { previewCheckoutState } from "@/lib/payments/preview-state";
+import { auditDeps, getCurrentUser, type CurrentUser } from "@/lib/server/runtime";
 import { PRIVATE_ROBOTS } from "@/lib/seo";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -26,23 +26,26 @@ function Shell({ children }: { children: React.ReactNode }) {
   return <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-14">{children}</div>;
 }
 
-async function AuditContent({ locale, params, searchParams }: { locale: Locale; params: Props["params"]; searchParams: Props["searchParams"] }) {
-  const { id } = await params;
+async function AuditContent({
+  locale,
+  user,
+  free,
+  searchParams,
+}: {
+  locale: Locale;
+  user: CurrentUser;
+  free: FreeResult;
+  searchParams: Props["searchParams"];
+}) {
   const query = await searchParams;
-  const user = await getCurrentUser();
-  if (!user) redirect(`/${locale}/signin?next=${encodeURIComponent(`/${locale}/audits/${id}`)}`);
-  if (!isUuid(id)) notFound();
-
   const t = getDictionary(locale);
   const r = t.result;
   const deps = await auditDeps();
-  const free = await getFreeResult(deps, user.id, id);
-  if (!free) notFound();
   const { audit, summary, decision, paymentUnderReview, refundPending } = free;
   const caseId = audit.id.slice(0, 8).toUpperCase();
 
   if (audit.status === "unlocked") {
-    const report = await getUnlockedReport(deps, user.id, id, locale);
+    const report = await getUnlockedReport(deps, user.id, audit.id, locale);
     if (!report) notFound();
     return (
       <>
@@ -103,7 +106,10 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
   const fee = formatUsd(decision.feeCents);
   const feeGate = feeGateCopy(r, decision);
   const net = formatUsd(summary.totalOwedCents - decision.feeCents);
-  const checkout = typeof query.checkout === "string" ? query.checkout : null;
+  const checkout = typeof query.checkout === "string" ? query.checkout : undefined;
+  const pending = await deps.repo.findPendingPayment(audit.id);
+  const paymentAttempts = await deps.repo.countPayments(audit.id);
+  const checkoutState = previewCheckoutState({ checkoutQuery: checkout, pendingPayment: !!pending, paymentAttempts });
 
   if (paymentUnderReview || refundPending) {
     return (
@@ -124,7 +130,7 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
     );
   }
 
-  if (checkout === "success") {
+  if (checkoutState === "confirming") {
     return (
       <Shell>
         <WaitForStatus auditId={audit.id} href={`/${locale}/audits/${audit.id}`} waitingFor="preview_ready" />
@@ -168,7 +174,7 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
           <input type="hidden" name="auditId" value={audit.id} />
           <input type="hidden" name="locale" value={locale} />
           <button type="submit" className="btn btn-gold w-full sm:w-auto" data-testid="pay">
-            {fill(r.pay, { fee })}
+            {checkoutState === "retry" ? r.payAgain : fill(r.pay, { fee })}
           </button>
         </form>
         <p className="mt-3 text-xs text-muted">🔐 {r.securedBy}</p>
@@ -180,10 +186,15 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
 
 export default async function AuditPage({ params, searchParams }: Props) {
   const locale = await currentLocale();
-  const t = getDictionary(locale);
-  return (
-    <Suspense fallback={<div className="mx-auto max-w-3xl px-4 py-14">{t.common.loading}</div>}>
-      <AuditContent locale={locale} params={params} searchParams={searchParams} />
-    </Suspense>
-  );
+  const { id } = await params;
+  const user = await getCurrentUser();
+  if (!user) redirect(`/${locale}/signin?next=${encodeURIComponent(`/${locale}/audits/${id}`)}`);
+  if (!isUuid(id)) notFound();
+
+  const deps = await auditDeps();
+  const free = await getFreeResult(deps, user.id, id);
+  if (!free) notFound();
+
+  // Ownership and existence are resolved here, outside any Suspense boundary, so notFound() is a real HTTP 404.
+  return <AuditContent locale={locale} user={user} free={free} searchParams={searchParams} />;
 }

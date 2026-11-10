@@ -205,3 +205,18 @@ describe("Copy Desk final strings (PR #2)", () => {
     expect(fill(es.signup.password.weak, { min: 8 })).toBe("Esa contraseña es muy corta. Usa al menos 8 caracteres.");
   });
 });
+
+describe("QA preview copy (user-flow §3 and §5 E6)", () => {
+  const en = getDictionary("en");
+  const es = getDictionary("es");
+
+  it("the shared disclaimer says it is not legal advice in both languages", () => {
+    expect(en.disclaimer).toMatch(/not legal advice/i);
+    expect(es.disclaimer).toMatch(/no (es|constituye) asesor[ií]a legal/i);
+  });
+
+  it("offers 'Try payment again' after a cancelled or failed checkout", () => {
+    expect(en.result.payAgain).toBe("Try payment again");
+    expect(es.result.payAgain).toBe("Intenta pagar de nuevo");
+  });
+});
