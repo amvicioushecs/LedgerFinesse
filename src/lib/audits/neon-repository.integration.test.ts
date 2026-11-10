@@ -17,7 +17,8 @@ if (enabled && !process.env.NEON_BRANCH?.startsWith("dev-")) throw new Error("LF
 const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37, 0, 0, 0, 0]);
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 
-describe.skipIf(!enabled)("Neon repository (dev branch)", () => {
+// Network-bound: the dev branch compute may be waking from autosuspend, which can take a few seconds.
+describe.skipIf(!enabled)("Neon repository (dev branch)", { timeout: 30_000 }, () => {
   const sql = enabled ? neonQuery(process.env.DATABASE_URL!) : (null as never);
   const deps = (userEmail: string | null = "renter@example.com"): AuditDeps => ({
     repo: new NeonAuditRepository(sql, { userEmail }),
@@ -81,13 +82,16 @@ describe.skipIf(!enabled)("Neon repository (dev branch)", () => {
     const session = `cs_test_${crypto.randomUUID().replaceAll("-", "")}`;
     await d.repo.insertPayment({ auditId: audit.id, userId: user, checkoutSessionId: session, amountCents: fee, status: "pending" });
     const eventId = `evt_mm_${crypto.randomUUID().slice(0, 8)}`;
-    expect(await d.repo.applyCheckoutPaid({ eventId, eventType: "checkout.session.completed", checkoutSessionId: session, auditId: audit.id, amountCents: fee + 1, currency: "usd", paymentIntentId: "pi_mm" })).toBe("amount_mismatch");
+    // Unique per run: the dev branch keeps rows between runs and both ids are unique columns.
+    const pi = `pi_mm_${crypto.randomUUID().slice(0, 8)}`;
+    const re = `re_test_${crypto.randomUUID().slice(0, 8)}`;
+    expect(await d.repo.applyCheckoutPaid({ eventId, eventType: "checkout.session.completed", checkoutSessionId: session, auditId: audit.id, amountCents: fee + 1, currency: "usd", paymentIntentId: pi })).toBe("amount_mismatch");
     expect(await d.repo.hasOpenReview(audit.id)).toBe(true);
     expect(await d.repo.hasPendingRefund(audit.id)).toBe(true);
     expect(await d.repo.hasUnknownSessionReview(audit.id)).toBe(false);
-    expect(await d.repo.findRefundDue(eventId)).toEqual({ paymentIntentId: "pi_mm", reason: "amount_mismatch", amountCents: fee + 1 });
-    expect(await d.repo.recordRefund(eventId, "re_test_1", fee + 1)).toBe(true);
-    expect(await d.repo.recordRefund(eventId, "re_test_1", fee + 1)).toBe(false);
+    expect(await d.repo.findRefundDue(eventId)).toEqual({ paymentIntentId: pi, reason: "amount_mismatch", amountCents: fee + 1 });
+    expect(await d.repo.recordRefund(eventId, re, fee + 1)).toBe(true);
+    expect(await d.repo.recordRefund(eventId, re, fee + 1)).toBe(false);
     expect(await d.repo.hasOpenReview(audit.id)).toBe(false);
     expect(await d.repo.hasPendingRefund(audit.id)).toBe(false);
     expect(await d.repo.hasPaidPayment(audit.id)).toBe(false);
@@ -97,7 +101,7 @@ describe.skipIf(!enabled)("Neon repository (dev branch)", () => {
   it("parks an unrecognized session for a person", async () => {
     const d = deps();
     const audit = (await createAudit(d, crypto.randomUUID(), input))!;
-    const outcome = await d.repo.applyCheckoutPaid({ eventId: `evt_unk_${crypto.randomUUID().slice(0, 8)}`, eventType: "checkout.session.completed", checkoutSessionId: "cs_test_unknown", auditId: audit.id, amountCents: 50, currency: "usd", paymentIntentId: null });
+    const outcome = await d.repo.applyCheckoutPaid({ eventId: `evt_unk_${crypto.randomUUID().slice(0, 8)}`, eventType: "checkout.session.completed", checkoutSessionId: `cs_test_unknown_${crypto.randomUUID().slice(0, 8)}`, auditId: audit.id, amountCents: 50, currency: "usd", paymentIntentId: null });
     expect(outcome).toBe("unknown_session");
     expect(await d.repo.hasUnknownSessionReview(audit.id)).toBe(true);
   });
