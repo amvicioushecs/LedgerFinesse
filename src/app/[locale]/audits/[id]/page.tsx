@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { fill, getDictionary } from "@/content/dictionaries";
-import { AutoRefresh } from "@/components/audit/auto-refresh";
+import { WaitForStatus } from "@/components/audit/wait-for-status";
 import { Disclaimer } from "@/components/disclaimer";
 import { ReportView } from "@/components/report/report-view";
 import { getFreeResult, getUnlockedReport } from "@/lib/audits/service";
@@ -66,7 +66,11 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
     return (
       <Shell>
         <h1 className="font-display text-3xl font-bold">{audit.status === "draft" ? r.draftTitle : r.processingTitle}</h1>
-        {audit.status === "draft" ? <p className="mt-2 text-muted">{r.draftBody}</p> : <AutoRefresh />}
+        {audit.status === "draft" ? (
+          <p className="mt-2 text-muted">{r.draftBody}</p>
+        ) : (
+          <WaitForStatus auditId={audit.id} href={`/${locale}/audits/${audit.id}`} waitingFor="processing" />
+        )}
         <Link href={`/${locale}/audits/new`} className="btn btn-gold mt-6">{t.dashboard.scanAnother}</Link>
       </Shell>
     );
@@ -101,7 +105,7 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
   if (checkout === "success") {
     return (
       <Shell>
-        <AutoRefresh />
+        <WaitForStatus auditId={audit.id} href={`/${locale}/audits/${audit.id}`} waitingFor="preview_ready" />
         <h1 className="font-display text-3xl font-bold" data-testid="payment-pending">{r.pendingTitle}</h1>
         <p className="mt-2 text-muted">{r.pendingBody}</p>
       </Shell>

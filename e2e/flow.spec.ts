@@ -11,6 +11,9 @@ const COPY = {
 } as const;
 
 async function shot(page: Page, name: string) {
+  // Streamed (Suspense) content can sit in the DOM hidden until the stream finishes.
+  await page.waitForLoadState("load");
+  await expect(page.getByText(/^(Loading…|Cargando…)$/)).toHaveCount(0);
   const project = test.info().project.name;
   await page.screenshot({ path: path.join(SHOTS, `${name}-${project}.png`), fullPage: true });
 }
@@ -50,6 +53,7 @@ for (const locale of ["en", "es"] as const) {
       await page.getByTestId("run-scan").click();
 
       await page.waitForURL(new RegExp(`/${locale}/audits/[0-9a-f-]{36}$`));
+      await expect(page.getByTestId("free-total")).toBeVisible();
       await expect(page.getByTestId("free-total")).toHaveText("$640.00");
       if (locale === "en") {
         await expect(page.getByTestId("found-title")).toHaveText(COPY.en.found);
@@ -72,7 +76,8 @@ for (const locale of ["en", "es"] as const) {
       await page.getByTestId("mock-pay").click();
 
       await page.waitForURL(new RegExp(`/${locale}/audits/[0-9a-f-]{36}`));
-      await expect(page.getByTestId("report-total")).toHaveText("$640.00", { timeout: 15_000 });
+      await expect(page.getByTestId("report-total")).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId("report-total")).toHaveText("$640.00");
       await expect(page.getByTestId("breakdown").locator("> li")).toHaveCount(5);
       await shot(page, `${locale}-06-unlocked-breakdown`);
 
