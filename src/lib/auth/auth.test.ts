@@ -13,6 +13,18 @@ describe("safeNextPath", () => {
       expect(safeNextPath(bad, "es")).toBe("/es/audits/new");
     }
   });
+
+  it("rejects paths the URL parser turns into another host (tab/newline stripping, encoded controls)", () => {
+    for (const bad of ["/\t/evil.com", "/\n/evil.com", "/\r/evil.com", "/%09/evil.com", "/%0a/evil.com", "/\u0000/evil.com", "/\t\\evil.com"]) {
+      const out = safeNextPath(bad, "en");
+      expect(out).toBe("/en/audits/new");
+      expect(new URL(out, "https://lf.example").origin).toBe("https://lf.example");
+    }
+  });
+
+  it("returns a normalized same-origin path with query and hash", () => {
+    expect(safeNextPath("/en/audits/./new?x=1#top", "en")).toBe("/en/audits/new?x=1#top");
+  });
 });
 
 describe("dev session", () => {
