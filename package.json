@@ -17,7 +17,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "build:cf": "npm run blog:build && opennextjs-cloudflare build",
-    "preview:cf": "npm run build:cf && opennextjs-cloudflare preview"
+    "preview:cf": "npm run build:cf && opennextjs-cloudflare preview",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "1.20.13",

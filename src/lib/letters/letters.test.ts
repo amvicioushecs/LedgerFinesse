@@ -46,7 +46,7 @@ describe("renderLetter", () => {
     const es = renderLetter({ ...base, locale: "es" });
     expect(es).toContain("$640.00");
     expect(es).toContain("diez (10) días hábiles");
-    expect(es).toMatch(/no es un bufete de abogados/);
+    expect(es).toMatch(/no es un despacho de abogados/);
   });
 
   it("uses a placeholder when the tenant name is unknown", () => {

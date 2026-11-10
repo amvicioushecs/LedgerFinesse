@@ -89,7 +89,7 @@ const T = {
     yourName: "[Su nombre completo]",
     yourAddress: "[Su dirección]",
     notice:
-      "Aviso de plantilla: esta carta es una plantilla generada a partir de una auditoría automatizada del estado de cuenta. LedgerFinesse no es un bufete de abogados y no ofrece asesoría legal. Esta plantilla debe ser revisada por un abogado con licencia en California antes del lanzamiento.",
+      "Aviso de plantilla: esta carta es una plantilla generada a partir de una auditoría automatizada del estado de cuenta. LedgerFinesse no es un despacho de abogados y no ofrece asesoría legal. Esta plantilla debe ser revisada por un abogado con licencia en California antes del lanzamiento.",
   },
 } as const;
 
