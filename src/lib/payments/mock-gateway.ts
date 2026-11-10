@@ -5,6 +5,7 @@ import type { CheckoutGateway, CheckoutSessionInfo, CheckoutSessionInput, Refund
  * Local stand-in for Stripe Checkout (STRIPE_MODE=mock; refused in production). "Paying" builds a
  * real checkout.session.completed payload signed with a local secret and runs it through the same
  * webhook handler, so the signature, amount and dedupe paths are the ones production uses.
+ * Development only (the secret below is public). Sessions live in memory on globalThis (server/runtime.ts).
  */
 export const MOCK_WEBHOOK_SECRET = "whsec_local_mock_only";
 export const mockStripe = new Stripe("sk_test_local_mock_only", { httpClient: Stripe.createFetchHttpClient() });

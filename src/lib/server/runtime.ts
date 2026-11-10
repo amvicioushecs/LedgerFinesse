@@ -23,7 +23,11 @@ export interface CurrentUser {
   email: string | null;
 }
 
-/** Process-wide singletons for the local backends (memory store and mock Stripe). */
+/**
+ * Process-wide singletons for the local backends (memory store, mock Stripe sessions and refunds), kept on
+ * globalThis so they survive module reloads. DEVELOPMENT ONLY: parseServerEnv refuses memory and mock outside
+ * SITE_ENV=development. On Workers each isolate has its own copy, so they are not shared state.
+ */
 const local = globalThis as typeof globalThis & {
   __lfMemory?: { repo: MemoryAuditRepository; files: MemoryDocumentStore };
   __lfMockGateway?: MockCheckoutGateway;

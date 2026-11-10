@@ -12,7 +12,7 @@ Next.js 16 (App Router) on Cloudflare Workers via OpenNext, Supabase (Postgres, 
 npm install
 npm run build && npx next start   # or: npm run dev
 ```
-With no env set, the app runs fully local. It uses an in-memory store, a dev sign-in cookie, demo extraction, and a mock Stripe gateway. The mock gateway sends signed test events through the real webhook handler. Copy `.env.example` (names only) to `.env.local` or `.dev.vars` to switch backends.
+With no env set, the app runs fully local (development only). It uses an in-memory store, a dev sign-in cookie, demo extraction, and a mock Stripe gateway. The mock gateway sends signed test events through the real webhook handler. Copy `.env.example` (names only) to `.env.local` or `.dev.vars` to switch backends. The memory store and mock Stripe sessions live in process memory on `globalThis`. They are development-only, and on Workers each isolate has its own copy.
 
 | Variable | Values | Notes |
 |---|---|---|
