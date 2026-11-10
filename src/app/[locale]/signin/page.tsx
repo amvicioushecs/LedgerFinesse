@@ -40,9 +40,9 @@ async function SignInForm({ locale, searchParams }: { locale: Locale; searchPara
           className="mt-1 block w-full rounded-md border border-line px-3 py-3 text-base"
         />
       </label>
-      {status === "error" ? (
+      {status === "error" || status === "rate" ? (
         <p role="alert" className="text-sm font-semibold text-alert">
-          {t.signup.error}
+          {status === "rate" ? t.signup.rateLimited : t.signup.error}
         </p>
       ) : null}
       <button type="submit" className="btn btn-gold w-full" data-testid="signin-submit">

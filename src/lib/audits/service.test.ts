@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { MemoryAuditRepository, MemoryDocumentStore } from "@/lib/audits/memory-repository";
-import { attachDocument, createAudit, getAuditStatus, getFreeResult, getUnlockedReport, listAudits, scanAudit, STALE_SCAN_MS, type AuditDeps } from "@/lib/audits/service";
+import { attachDocument, canStartAudit, createAudit, getAuditStatus, getFreeResult, getUnlockedReport, listAudits, scanAudit, STALE_SCAN_MS, type AuditDeps } from "@/lib/audits/service";
 import { demoExtractor } from "@/lib/extraction/demo";
 import type { Extractor } from "@/lib/audits/types";
 import { SAMPLE_CASE } from "@/content/sample-case";
@@ -21,6 +21,7 @@ beforeEach(() => {
     extractor: demoExtractor,
     now: () => new Date("2026-11-09T18:00:00Z"),
     newId: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, "0")}`,
+    dailyAuditLimit: 10,
   };
 });
 
@@ -31,6 +32,20 @@ async function readyAudit(extractor?: Extractor) {
   expect((await attachDocument(deps, USER, audit.id, { kind: "ledger", bytes: PNG, declaredType: "image/png" })).ok).toBe(true);
   return audit;
 }
+
+describe("daily audit cap", () => {
+  it("refuses a new audit once the user started the daily limit in the last 24 hours", async () => {
+    deps.dailyAuditLimit = 2;
+    const input = { locale: "en" as const, jurisdiction: "san-diego-ca" as const, landlordName: null, tenantName: null, propertyAddress: null };
+    expect(await canStartAudit(deps, USER)).toBe(true);
+    await createAudit(deps, USER, input);
+    await createAudit(deps, USER, input);
+    expect(await canStartAudit(deps, USER)).toBe(false);
+    expect(await canStartAudit(deps, OTHER)).toBe(true);
+    deps.now = () => new Date("2026-11-10T18:00:01Z");
+    expect(await canStartAudit(deps, USER)).toBe(true);
+  });
+});
 
 describe("upload", () => {
   it("stores files under the owner's folder with the sniffed type", async () => {

@@ -17,7 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t.upload.title, robots: PRIVATE_ROBOTS };
 }
 
-const ERRORS = { type: "errorType", size: "errorSize", missing: "missing", generic: "errorGeneric" } as const;
+const ERRORS = { type: "errorType", size: "errorSize", missing: "missing", generic: "errorGeneric", rate: "errorRate", daily: "errorDaily" } as const;
 
 async function Upload({ locale, searchParams }: { locale: Locale; searchParams: PageProps<"/[locale]/audits/new">["searchParams"] }) {
   const user = await getCurrentUser();

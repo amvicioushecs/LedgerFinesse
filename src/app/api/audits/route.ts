@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { attachDocument, createAudit, scanAudit } from "@/lib/audits/service";
+import { attachDocument, canStartAudit, createAudit, scanAudit } from "@/lib/audits/service";
 import { readUploadRequest } from "@/lib/audits/upload-request";
 import { isLocale, type Locale } from "@/lib/i18n/locales";
 import { LOCALE_COOKIE } from "@/lib/i18n/routing";
-import { auditDeps, getCurrentUser, isSameOrigin } from "@/lib/server/runtime";
+import { auditDeps, getCurrentUser, isSameOrigin, rateLimited } from "@/lib/server/runtime";
 
 /** Upload lease + ledger, run the free scan, then show the result page. */
 export async function POST(request: NextRequest) {
@@ -15,6 +15,11 @@ export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.redirect(new URL(`/${locale}/signin?next=/${locale}/audits/new`, request.url), 303);
 
+  const refuse = (error: "rate" | "daily") => NextResponse.redirect(new URL(`/${locale}/audits/new?error=${error}`, request.url), 303);
+  if (await rateLimited(request, "upload", user.id)) return refuse("rate");
+  const deps = await auditDeps();
+  if (!(await canStartAudit(deps, user.id))) return refuse("daily");
+
   const parsed = await readUploadRequest(request);
   if (!parsed.ok) {
     // Over the request cap: refuse outright (the body was never read). Otherwise back to the form.
@@ -23,7 +28,6 @@ export async function POST(request: NextRequest) {
   }
   const { form } = parsed;
 
-  const deps = await auditDeps();
   const audit = await createAudit(deps, user.id, form);
   for (const file of form.files) {
     const attached = await attachDocument(deps, user.id, audit.id, file);

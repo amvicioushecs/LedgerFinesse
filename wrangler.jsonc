@@ -1,4 +1,4 @@
-// Minimal stub. KV, Queues, cron triggers and secrets are added later.
+// KV, Queues, cron triggers and secrets are added later.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ledgerfinesse-web",
@@ -6,5 +6,13 @@
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // Per Cloudflare location, approximate. Each binding counts per IP and per user (or sign-in email)
+  // separately (src/lib/rate-limit.ts). period must be 10 or 60 seconds. namespace_id must be unique per account.
+  // The daily audits-per-user cap is LF_DAILY_AUDIT_LIMIT (default 10), enforced in the audit service.
+  "ratelimits": [
+    { "name": "UPLOAD_RATE_LIMITER", "namespace_id": "7101", "simple": { "limit": 10, "period": 60 } },
+    { "name": "SIGNIN_RATE_LIMITER", "namespace_id": "7102", "simple": { "limit": 10, "period": 60 } },
+    { "name": "CHECKOUT_RATE_LIMITER", "namespace_id": "7103", "simple": { "limit": 20, "period": 60 } }
+  ]
 }

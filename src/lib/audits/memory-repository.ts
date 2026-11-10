@@ -43,6 +43,10 @@ export class MemoryAuditRepository implements AuditRepository {
       .map((a) => ({ ...a }));
   }
 
+  async countAuditsSince(userId: string, since: string) {
+    return [...this.audits.values()].filter((a) => a.userId === userId && a.createdAt >= since).length;
+  }
+
   async insertDocument(doc: DocumentRecord) {
     this.documents.push({ ...doc });
   }

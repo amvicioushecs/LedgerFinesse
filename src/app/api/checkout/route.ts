@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { startCheckout } from "@/lib/payments/checkout";
 import { isLocale, type Locale } from "@/lib/i18n/locales";
-import { checkoutDeps, getCurrentUser, isSameOrigin } from "@/lib/server/runtime";
+import { checkoutDeps, getCurrentUser, isSameOrigin, rateLimited } from "@/lib/server/runtime";
 
 /** Opens Stripe Checkout for the stored 15% fee. The request carries no amount. */
 export async function POST(request: NextRequest) {
@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
 
   const user = await getCurrentUser();
   if (!user) return NextResponse.redirect(new URL(`/${locale}/signin`, request.url), 303);
+  if (await rateLimited(request, "checkout", user.id)) return back("?checkout=rate");
 
   try {
     const result = await startCheckout(await checkoutDeps(), { userId: user.id, email: user.email }, auditId, locale);

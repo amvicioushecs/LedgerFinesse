@@ -14,6 +14,8 @@ export interface ServerEnv {
   gemini: { apiKey: string; model: string } | null;
   /** Signs local dev sessions (backend=memory, development only). Null everywhere else: no fallback secret. */
   devSessionSecret: string | null;
+  /** Audits one user may start per rolling 24 hours. */
+  dailyAuditLimit: number;
 }
 
 type Raw = Record<string, string | undefined>;
@@ -72,6 +74,9 @@ export function parseServerEnv(raw: Raw): ServerEnv {
   const gemini =
     extractionMode === "gemini" ? { apiKey: need("GEMINI_API_KEY"), model: raw.GEMINI_MODEL?.trim() || "gemini-3.8-flash" } : null;
 
+  const dailyAuditLimit = Number(raw.LF_DAILY_AUDIT_LIMIT?.trim() || "10");
+  if (!Number.isSafeInteger(dailyAuditLimit) || dailyAuditLimit < 1) errors.push("LF_DAILY_AUDIT_LIMIT must be a positive integer");
+
   if (errors.length > 0) throw new Error(`Invalid server configuration:\n- ${errors.join("\n- ")}`);
   return {
     siteEnv,
@@ -83,6 +88,7 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     stripe,
     gemini,
     devSessionSecret: siteEnv === "development" ? raw.DEV_SESSION_SECRET?.trim() || "local-dev-only-not-a-secret" : null,
+    dailyAuditLimit,
   };
 }
 

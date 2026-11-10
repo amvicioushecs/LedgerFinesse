@@ -1,6 +1,7 @@
 import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { cookies } from "next/headers";
 import { MemoryAuditRepository, MemoryDocumentStore } from "@/lib/audits/memory-repository";
 import type { AuditDeps } from "@/lib/audits/service";
@@ -14,6 +15,7 @@ import type { Locale } from "@/lib/i18n/locales";
 import { MOCK_WEBHOOK_SECRET, MockCheckoutGateway, MockRefundGateway, mockStripe } from "@/lib/payments/mock-gateway";
 import { createStripeClient, StripeCheckoutGateway, StripeRefundGateway } from "@/lib/payments/stripe-gateway";
 import type { CheckoutGateway, RefundGateway } from "@/lib/payments/types";
+import { RATE_LIMIT_BINDINGS, clientIp, isRateLimited, type Limiters, type RateLimitedAction } from "@/lib/rate-limit";
 import type Stripe from "stripe";
 
 export interface CurrentUser {
@@ -136,6 +138,7 @@ export async function auditDeps(): Promise<AuditDeps> {
     extractor: extractor(env),
     now: () => new Date(),
     newId: () => crypto.randomUUID(),
+    dailyAuditLimit: env.dailyAuditLimit,
   };
 }
 
@@ -163,4 +166,18 @@ export function isSameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
   if (origin === null) return request.headers.get("sec-fetch-site") !== "cross-site";
   return origin === new URL(request.url).origin || origin === serverEnv().appUrl;
+}
+
+/** Workers rate-limit bindings when running on Cloudflare (or wrangler dev); none under `next start`. */
+function limiters(): Limiters {
+  try {
+    const env = getCloudflareContext().env as unknown as Limiters;
+    return Object.fromEntries(Object.values(RATE_LIMIT_BINDINGS).map((name) => [name, env[name]]));
+  } catch {
+    return {};
+  }
+}
+
+export function rateLimited(request: Request, action: RateLimitedAction, subject: string | null): Promise<boolean> {
+  return isRateLimited(limiters(), action, { ip: clientIp(request.headers), subject });
 }

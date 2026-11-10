@@ -46,6 +46,13 @@ describe("parseServerEnv", () => {
     expect(preview.devSessionSecret).toBeNull();
   });
 
+  it("reads the daily audit cap (default 10) and rejects nonsense", () => {
+    expect(parseServerEnv({}).dailyAuditLimit).toBe(10);
+    expect(parseServerEnv({ LF_DAILY_AUDIT_LIMIT: "3" }).dailyAuditLimit).toBe(3);
+    expect(() => parseServerEnv({ LF_DAILY_AUDIT_LIMIT: "0" })).toThrow(/LF_DAILY_AUDIT_LIMIT/);
+    expect(() => parseServerEnv({ LF_DAILY_AUDIT_LIMIT: "lots" })).toThrow(/LF_DAILY_AUDIT_LIMIT/);
+  });
+
   it("refuses live Stripe keys outside production", () => {
     expect(() => parseServerEnv({ STRIPE_MODE: "stripe", STRIPE_SECRET_KEY: "sk_live_1", STRIPE_WEBHOOK_SECRET: "whsec_1" })).toThrow(/live Stripe key/);
     expect(() => parseServerEnv({ STRIPE_MODE: "stripe", STRIPE_SECRET_KEY: "rk_live_1", STRIPE_WEBHOOK_SECRET: "whsec_1" })).toThrow(/live Stripe key/);

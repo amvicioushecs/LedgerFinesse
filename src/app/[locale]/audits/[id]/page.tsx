@@ -141,6 +141,7 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
 
       {checkout === "cancel" ? <p role="status" className="mt-6 rounded-md bg-butter p-3 text-sm font-semibold">{r.cancelled}</p> : null}
       {checkout === "error" ? <p role="alert" className="mt-6 rounded-md bg-butter p-3 text-sm font-semibold text-alert">{r.checkoutError}</p> : null}
+      {checkout === "rate" ? <p role="alert" className="mt-6 rounded-md bg-butter p-3 text-sm font-semibold text-alert">{r.checkoutRate}</p> : null}
 
       <section className="mt-6 rounded-lg border-2 border-forest p-6" data-testid="fee-gate">
         <h2 className="font-display text-2xl font-bold">{r.feeTitle}</h2>

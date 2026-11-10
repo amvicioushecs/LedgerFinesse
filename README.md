@@ -21,6 +21,7 @@ With no env set, the app runs fully local. It uses an in-memory store, a dev sig
 | `STRIPE_MODE` | `mock` \| `stripe` | `stripe` needs `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` |
 | `EXTRACTION_MODE` | `demo` \| `gemini` | `gemini` needs `GEMINI_API_KEY`; `GEMINI_MODEL` is optional |
 | `NEXT_PUBLIC_APP_URL` | absolute origin | Used for Checkout return URLs, the magic-link redirect, canonical URLs and the sitemap |
+| `LF_DAILY_AUDIT_LIMIT` | positive integer | Audits one user may start per rolling 24 hours (default 10) |
 | `DEV_SESSION_SECRET` | string | Signs the dev sign-in cookie (memory backend, development only; ignored elsewhere) |
 
 ## Supabase
@@ -32,6 +33,9 @@ With no env set, the app runs fully local. It uses an in-memory store, a dev sig
 - Use a `sk_test_`/`rk_test_` key. A Stripe sandbox is recommended.
 - Webhook endpoint: `{APP_URL}/api/stripe/webhook`. Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`.
 - The fee is computed on the server from the stored audit. An audit unlocks only on a verified webhook that reports `payment_status=paid` and an amount matching the stored fee. Returning to the success URL never unlocks anything.
+
+## Rate limits
+Workers rate-limit bindings in `wrangler.jsonc` (`UPLOAD_RATE_LIMITER`, `SIGNIN_RATE_LIMITER`, `CHECKOUT_RATE_LIMITER`). Each one counts per IP and per user (or sign-in email). Change `simple.limit` to tune them. Under `next start` there are no bindings, so nothing is limited. The daily audit cap applies everywhere.
 
 ## Scripts
 | Script | What it does |

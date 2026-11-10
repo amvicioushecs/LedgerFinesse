@@ -145,6 +145,16 @@ export class SupabaseAuditRepository implements AuditRepository {
     }));
   }
 
+  async countAuditsSince(userId: string, since: string) {
+    const { count, error } = await this.admin
+      .from("audits")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("created_at", since);
+    if (error) throw new Error(`count audits: ${error.message}`);
+    return count ?? 0;
+  }
+
   async claimForScan(userId: string, auditId: string, startedAt: string) {
     const data = check(
       await this.admin

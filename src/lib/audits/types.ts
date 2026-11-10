@@ -118,6 +118,8 @@ export interface AuditRepository {
   insertAudit(audit: AuditRecord): Promise<void>;
   findAudit(userId: string, auditId: string): Promise<AuditRecord | null>;
   listAudits(userId: string): Promise<AuditRecord[]>;
+  /** Audits the user created at or after `since` (daily cap). */
+  countAuditsSince(userId: string, since: string): Promise<number>;
   insertDocument(doc: DocumentRecord): Promise<void>;
   listDocuments(userId: string, auditId: string): Promise<DocumentRecord[]>;
   /** Atomically move draft → processing, stamping when the scan started. False if not a draft owned by the user. */

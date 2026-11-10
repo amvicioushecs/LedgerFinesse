@@ -17,6 +17,8 @@ export interface AuditDeps {
   extractor: Extractor;
   now: () => Date;
   newId: () => string;
+  /** Audits one user may start per rolling 24 hours (LF_DAILY_AUDIT_LIMIT). */
+  dailyAuditLimit: number;
 }
 
 export interface NewAuditInput {
@@ -31,6 +33,12 @@ const clean = (value: string | null, max: number) => {
   const trimmed = value?.replace(/\s+/g, " ").trim() ?? "";
   return trimmed === "" ? null : trimmed.slice(0, max);
 };
+
+/** Daily cap: each scan costs a model call, so one account can't run unlimited scans. */
+export async function canStartAudit(deps: AuditDeps, userId: string): Promise<boolean> {
+  const since = new Date(deps.now().getTime() - 24 * 60 * 60_000).toISOString();
+  return (await deps.repo.countAuditsSince(userId, since)) < deps.dailyAuditLimit;
+}
 
 export async function createAudit(deps: AuditDeps, userId: string, input: NewAuditInput): Promise<AuditRecord> {
   const audit: AuditRecord = {
