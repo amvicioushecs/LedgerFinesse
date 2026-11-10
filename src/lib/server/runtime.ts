@@ -11,9 +11,9 @@ import { serverEnv, type ServerEnv } from "@/lib/env";
 import { demoExtractor } from "@/lib/extraction/demo";
 import { createGeminiExtractor } from "@/lib/extraction/gemini";
 import type { Locale } from "@/lib/i18n/locales";
-import { MOCK_WEBHOOK_SECRET, MockCheckoutGateway, mockStripe } from "@/lib/payments/mock-gateway";
-import { createStripeClient, StripeCheckoutGateway } from "@/lib/payments/stripe-gateway";
-import type { CheckoutGateway } from "@/lib/payments/types";
+import { MOCK_WEBHOOK_SECRET, MockCheckoutGateway, MockRefundGateway, mockStripe } from "@/lib/payments/mock-gateway";
+import { createStripeClient, StripeCheckoutGateway, StripeRefundGateway } from "@/lib/payments/stripe-gateway";
+import type { CheckoutGateway, RefundGateway } from "@/lib/payments/types";
 import type Stripe from "stripe";
 
 export interface CurrentUser {
@@ -25,6 +25,7 @@ export interface CurrentUser {
 const local = globalThis as typeof globalThis & {
   __lfMemory?: { repo: MemoryAuditRepository; files: MemoryDocumentStore };
   __lfMockGateway?: MockCheckoutGateway;
+  __lfMockRefunds?: MockRefundGateway;
 };
 
 function memory() {
@@ -141,11 +142,15 @@ export async function checkoutDeps(): Promise<{ repo: AuditRepository; gateway: 
 }
 
 /** Webhook deps: service-role repository only (no user session on webhook requests). */
-export function webhookDeps(): { stripe: Stripe; webhookSecret: string; repo: AuditRepository } {
+export function webhookDeps(): { stripe: Stripe; webhookSecret: string; repo: AuditRepository; refunds: RefundGateway } {
   const env = serverEnv();
   const repo = env.backend === "memory" ? memory().repo : new SupabaseAuditRepository(supabaseAdmin(env), supabaseAdmin(env));
-  if (env.stripe) return { stripe: createStripeClient(env.stripe.secretKey), webhookSecret: env.stripe.webhookSecret, repo };
-  return { stripe: mockStripe, webhookSecret: MOCK_WEBHOOK_SECRET, repo };
+  if (env.stripe) {
+    const stripe = createStripeClient(env.stripe.secretKey);
+    return { stripe, webhookSecret: env.stripe.webhookSecret, repo, refunds: new StripeRefundGateway(stripe) };
+  }
+  local.__lfMockRefunds ??= new MockRefundGateway();
+  return { stripe: mockStripe, webhookSecret: MOCK_WEBHOOK_SECRET, repo, refunds: local.__lfMockRefunds };
 }
 
 /** Rejects cross-site form posts (defense in depth on top of SameSite=Lax cookies). */

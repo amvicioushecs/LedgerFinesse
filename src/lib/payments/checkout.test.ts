@@ -22,6 +22,12 @@ class FakeGateway implements CheckoutGateway {
     if (!s) throw new Error("no such session");
     return s;
   }
+  expired: string[] = [];
+  async expireSession(id: string) {
+    this.expired.push(id);
+    const s = this.sessions.get(id);
+    if (s) s.status = "expired";
+  }
 }
 
 const audit = (overrides: Partial<AuditRecord> = {}): AuditRecord => ({
@@ -77,6 +83,30 @@ describe("startCheckout", () => {
     gateway.sessions.get("cs_test_1")!.status = "complete";
     expect(await startCheckout(deps(), { userId: "user-a", email: null }, "audit-1", "en")).toEqual({ kind: "processing" });
     expect((await repo.findAudit("user-a", "audit-1"))?.status).toBe("preview_ready");
+  });
+
+  it("expires a still-open session at Stripe before replacing it, so it can't be paid as well", async () => {
+    await repo.insertAudit(audit());
+    await startCheckout(deps(), { userId: "user-a", email: null }, "audit-1", "en");
+    gateway.sessions.get("cs_test_1")!.url = null; // open but unusable: replaced
+    const result = await startCheckout(deps(), { userId: "user-a", email: null }, "audit-1", "en");
+    expect(gateway.expired).toEqual(["cs_test_1"]);
+    expect(result).toEqual({ kind: "redirect", url: "https://checkout.stripe.test/2" });
+  });
+
+  it("does not expire a session Stripe already expired", async () => {
+    await repo.insertAudit(audit());
+    await startCheckout(deps(), { userId: "user-a", email: null }, "audit-1", "en");
+    gateway.sessions.get("cs_test_1")!.status = "expired";
+    await startCheckout(deps(), { userId: "user-a", email: null }, "audit-1", "en");
+    expect(gateway.expired).toEqual([]);
+  });
+
+  it("never opens a second checkout once a payment for the audit is recorded (it is under review)", async () => {
+    await repo.insertAudit(audit());
+    await repo.insertPayment({ auditId: "audit-1", userId: "user-a", checkoutSessionId: "cs_test_paid", amountCents: 9600, status: "paid" });
+    expect(await startCheckout(deps(), { userId: "user-a", email: null }, "audit-1", "en")).toEqual({ kind: "no_checkout", reason: "under_review" });
+    expect(gateway.created).toHaveLength(0);
   });
 
   it("does not open checkout for clean, unlocked, foreign or tampered audits", async () => {

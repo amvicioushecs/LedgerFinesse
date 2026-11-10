@@ -6,6 +6,7 @@ import type {
   DocumentRecord,
   DocumentStore,
   PaymentRecord,
+  PaymentReview,
   ScanResult,
   StoredFinding,
   StoredLetter,
@@ -23,6 +24,8 @@ export class MemoryAuditRepository implements AuditRepository {
   private payments = new Map<string, PaymentRecord>();
   private events = new Set<string>();
   private scanStartedAt = new Map<string, string>();
+  /** Mirrors `payment_reviews` (admin queue). */
+  readonly reviews: PaymentReview[] = [];
 
   async insertAudit(audit: AuditRecord) {
     this.audits.set(audit.id, { ...audit });
@@ -123,16 +126,57 @@ export class MemoryAuditRepository implements AuditRepository {
     this.events.add(event.eventId);
     const payment = this.payments.get(event.checkoutSessionId);
     const audit = this.audits.get(event.auditId);
-    if (!payment || !audit || payment.auditId !== audit.id) return "unknown_session";
-    if (audit.status === "unlocked") return "already_unlocked";
-    if (audit.status !== "preview_ready") return "not_unlockable";
-    if (event.currency !== "usd" || event.amountCents !== audit.feeCents || event.amountCents !== payment.amountCents) {
-      return "amount_mismatch";
+    let outcome: CheckoutPaidOutcome;
+    if (!payment || !audit || payment.auditId !== audit.id) {
+      outcome = "unknown_session";
+    } else if (payment.status === "paid" || payment.status === "refunded") {
+      if (audit.status === "unlocked") return "already_unlocked";
+      outcome = "not_unlockable";
+    } else {
+      payment.status = "paid";
+      if (audit.status === "unlocked") outcome = "duplicate_payment";
+      else if (audit.status !== "preview_ready") outcome = "not_unlockable";
+      else if (event.currency !== "usd" || event.amountCents !== audit.feeCents || event.amountCents !== payment.amountCents) {
+        outcome = "amount_mismatch";
+      } else {
+        audit.status = "unlocked";
+        audit.unlockedAt = new Date().toISOString();
+        return "unlocked";
+      }
     }
-    payment.status = "paid";
-    audit.status = "unlocked";
-    audit.unlockedAt = new Date().toISOString();
-    return "unlocked";
+    this.reviews.push({
+      eventId: event.eventId,
+      reason: outcome as PaymentReview["reason"],
+      auditId: audit?.id ?? null,
+      checkoutSessionId: event.checkoutSessionId,
+      paymentIntentId: event.paymentIntentId,
+      amountCents: event.amountCents,
+      currency: event.currency,
+      refundId: null,
+    });
+    return outcome;
+  }
+
+  async hasPaidPayment(auditId: string) {
+    return [...this.payments.values()].some((p) => p.auditId === auditId && (p.status === "paid" || p.status === "refunded"));
+  }
+
+  async findRefundDue(eventId: string) {
+    const review = this.reviews.find((r) => r.eventId === eventId && r.reason === "duplicate_payment" && r.refundId === null);
+    return review?.paymentIntentId ? { paymentIntentId: review.paymentIntentId } : null;
+  }
+
+  async recordRefund(eventId: string, refundId: string) {
+    const review = this.reviews.find((r) => r.eventId === eventId && r.reason === "duplicate_payment" && r.refundId === null);
+    if (!review) return;
+    review.refundId = refundId;
+    const payment = this.payments.get(review.checkoutSessionId);
+    if (payment) payment.status = "refunded";
+  }
+
+  /** Test helper. */
+  paymentStatus(checkoutSessionId: string): PaymentRecord["status"] | undefined {
+    return this.payments.get(checkoutSessionId)?.status;
   }
 }
 

@@ -159,6 +159,8 @@ export const en = {
     draftBody: "This audit is waiting for a ledger and a lease.",
     pendingTitle: "Confirming your payment…",
     pendingBody: "This usually takes a few seconds. This page updates automatically once Stripe confirms the payment.",
+    reviewTitle: "We received your payment and are checking it",
+    reviewBody: "Something about this payment didn't match your audit, so a person is reviewing it. You won't be charged again. When the review is done, your report unlocks here or your payment is refunded.",
     cancelled: "Checkout was cancelled. You haven't been charged.",
     checkoutError: "We couldn't open checkout. Please try again.",
   },

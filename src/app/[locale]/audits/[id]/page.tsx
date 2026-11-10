@@ -36,7 +36,7 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
   const deps = await auditDeps();
   const free = await getFreeResult(deps, user.id, id);
   if (!free) notFound();
-  const { audit, summary, decision } = free;
+  const { audit, summary, decision, paymentUnderReview } = free;
   const caseId = audit.id.slice(0, 8).toUpperCase();
 
   if (audit.status === "unlocked") {
@@ -101,6 +101,15 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
   const fee = formatUsd(decision.feeCents);
   const net = formatUsd(summary.totalOwedCents - decision.feeCents);
   const checkout = typeof query.checkout === "string" ? query.checkout : null;
+
+  if (paymentUnderReview) {
+    return (
+      <Shell>
+        <h1 className="font-display text-3xl font-bold" data-testid="payment-review">{r.reviewTitle}</h1>
+        <p className="mt-2 text-muted">{r.reviewBody}</p>
+      </Shell>
+    );
+  }
 
   if (checkout === "success") {
     return (

@@ -161,6 +161,8 @@ export const es: Dictionary = {
     draftBody: "Esta auditoría está esperando un estado de cuenta y un contrato.",
     pendingTitle: "Confirmando tu pago…",
     pendingBody: "Suele tardar unos segundos. Esta página se actualiza sola cuando Stripe confirma el pago.",
+    reviewTitle: "Recibimos tu pago y lo estamos revisando",
+    reviewBody: "Algo de este pago no coincidió con tu auditoría, así que una persona lo está revisando. No se te cobrará de nuevo. Al terminar la revisión, tu informe se desbloquea aquí o se te reembolsa el pago.",
     cancelled: "Cancelaste el pago. No se te cobró nada.",
     checkoutError: "No pudimos abrir el pago. Inténtalo de nuevo.",
   },

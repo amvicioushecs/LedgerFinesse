@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
     const result = await startCheckout(await checkoutDeps(), { userId: user.id, email: user.email }, auditId, locale);
     if (result.kind === "redirect") return NextResponse.redirect(result.url, 303);
     if (result.kind === "processing") return back("?checkout=success");
+    // under_review / unlocked / clean: the audit page explains the state.
     if (result.kind === "not_found") return new NextResponse("Not found", { status: 404 });
     return back("");
   } catch (error) {

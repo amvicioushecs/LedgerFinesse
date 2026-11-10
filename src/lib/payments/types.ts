@@ -22,4 +22,11 @@ export interface CheckoutSessionInfo {
 export interface CheckoutGateway {
   createSession(input: CheckoutSessionInput): Promise<CheckoutSessionInfo>;
   retrieveSession(id: string): Promise<CheckoutSessionInfo>;
+  /** Makes an open session unpayable at Stripe. */
+  expireSession(id: string): Promise<void>;
+}
+
+/** Refunds a proven duplicate charge. Returns the refund id. */
+export interface RefundGateway {
+  refund(paymentIntentId: string, idempotencyKey: string): Promise<string>;
 }

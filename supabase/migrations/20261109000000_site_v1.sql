@@ -161,9 +161,28 @@ create table public.stripe_events (
   outcome      text
 );
 
+-- ---------------------------------------------------------------- payment_reviews (server only)
+-- A paid Checkout Session that did not unlock its audit. Admins work this queue (SQL editor / service role).
+-- duplicate_payment rows are refunded automatically; the others wait for a person (refund policy: open decision).
+create table public.payment_reviews (
+  id                   uuid primary key default gen_random_uuid(),
+  event_id             text not null unique references public.stripe_events (event_id),
+  reason               text not null check (reason in ('amount_mismatch', 'duplicate_payment', 'not_unlockable', 'unknown_session')),
+  audit_id             uuid references public.audits (id) on delete set null,
+  checkout_session_id  text not null,
+  payment_intent_id    text,
+  amount_cents         bigint,
+  currency             text,
+  refund_id            text,
+  resolved_at          timestamptz,
+  created_at           timestamptz not null default now()
+);
+create index payment_reviews_open_idx on public.payment_reviews (created_at) where resolved_at is null;
+
 -- ---------------------------------------------------------------- unlock (service role only)
--- One transaction: dedupe the event, check the paid amount against the stored fee, mark paid, unlock.
--- Returns 'unlocked' | 'duplicate' | 'already_unlocked' | 'amount_mismatch' | 'unknown_session' | 'not_unlockable'.
+-- One transaction: dedupe the event, record the payment as paid, check the amount against the stored fee, unlock.
+-- Returns 'unlocked' | 'duplicate' | 'already_unlocked' | 'duplicate_payment' | 'amount_mismatch'
+--       | 'unknown_session' | 'not_unlockable'. Every outcome after 'already_unlocked' also writes a payment_reviews row.
 create or replace function public.apply_checkout_paid(
   p_event_id text, p_event_type text, p_session_id text, p_audit_id uuid,
   p_amount_cents bigint, p_currency text, p_payment_intent_id text
@@ -185,25 +204,57 @@ begin
 
   if v_payment.id is null or v_audit.id is null or v_payment.audit_id is distinct from v_audit.id then
     v_outcome := 'unknown_session';
-  elsif v_audit.status = 'unlocked' then
-    v_outcome := 'already_unlocked';
-  elsif v_audit.status <> 'preview_ready' then
-    v_outcome := 'not_unlockable';
-  elsif p_currency <> 'usd' or p_amount_cents <> v_audit.fee_cents or p_amount_cents <> v_payment.amount_cents then
-    v_outcome := 'amount_mismatch';
+  elsif v_payment.status in ('paid', 'refunded') then
+    -- This session was already recorded (e.g. completed, then async_payment_succeeded).
+    v_outcome := case when v_audit.status = 'unlocked' then 'already_unlocked' else 'not_unlockable' end;
+    if v_outcome = 'already_unlocked' then
+      update public.stripe_events set processed_at = now(), outcome = v_outcome where event_id = p_event_id;
+      return v_outcome;
+    end if;
   else
+    -- Stripe took the money: record it whatever happens next.
     update public.payments
       set status = 'paid', paid_at = now(), stripe_payment_intent_id = p_payment_intent_id
       where id = v_payment.id;
-    update public.audits set status = 'unlocked', unlocked_at = now() where id = v_audit.id;
-    v_outcome := 'unlocked';
+    if v_audit.status = 'unlocked' then
+      v_outcome := 'duplicate_payment';
+    elsif v_audit.status <> 'preview_ready' then
+      v_outcome := 'not_unlockable';
+    elsif p_currency <> 'usd' or p_amount_cents <> v_audit.fee_cents or p_amount_cents <> v_payment.amount_cents then
+      v_outcome := 'amount_mismatch';
+    else
+      update public.audits set status = 'unlocked', unlocked_at = now() where id = v_audit.id;
+      v_outcome := 'unlocked';
+    end if;
   end if;
 
+  if v_outcome <> 'unlocked' then
+    insert into public.payment_reviews
+      (event_id, reason, audit_id, checkout_session_id, payment_intent_id, amount_cents, currency)
+      values (p_event_id, v_outcome, v_audit.id, p_session_id, p_payment_intent_id, p_amount_cents, p_currency)
+      on conflict (event_id) do nothing;
+  end if;
   update public.stripe_events set processed_at = now(), outcome = v_outcome where event_id = p_event_id;
   return v_outcome;
 end $$;
 revoke all on function public.apply_checkout_paid(text, text, text, uuid, bigint, text, text) from public, anon, authenticated;
 grant execute on function public.apply_checkout_paid(text, text, text, uuid, bigint, text, text) to service_role;
+
+-- Records the Stripe refund for a duplicate_payment review. True when the review was open.
+create or replace function public.record_refund(p_event_id text, p_refund_id text)
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare
+  v_review public.payment_reviews%rowtype;
+begin
+  update public.payment_reviews set refund_id = p_refund_id, resolved_at = now()
+    where event_id = p_event_id and reason = 'duplicate_payment' and refund_id is null
+    returning * into v_review;
+  if v_review.id is null then return false; end if;
+  update public.payments set status = 'refunded' where stripe_checkout_session_id = v_review.checkout_session_id;
+  return true;
+end $$;
+revoke all on function public.record_refund(text, text) from public, anon, authenticated;
+grant execute on function public.record_refund(text, text) to service_role;
 
 -- ---------------------------------------------------------------- save scan (service role only)
 -- Stores the engine output in one transaction. Only a 'processing' audit can be completed.
@@ -258,10 +309,11 @@ alter table public.findings      enable row level security;
 alter table public.letters       enable row level security;
 alter table public.payments      enable row level security;
 alter table public.stripe_events enable row level security;  -- no policies: service role only
+alter table public.payment_reviews enable row level security;  -- no policies: service role only
 
 -- Renters never write through the Data API; every write goes through a server route.
 revoke all on public.profiles, public.audits, public.documents, public.extractions,
-  public.findings, public.letters, public.payments, public.stripe_events from anon, authenticated;
+  public.findings, public.letters, public.payments, public.stripe_events, public.payment_reviews from anon, authenticated;
 grant select on public.profiles, public.audits, public.documents, public.findings,
   public.letters, public.payments to authenticated;
 

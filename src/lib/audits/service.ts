@@ -201,6 +201,8 @@ export interface FreeResult {
   audit: AuditRecord;
   summary: FreeSummary | null;
   decision: UnlockDecision | null;
+  /** Stripe took a payment that did not unlock the audit; it is in the admin review queue. */
+  paymentUnderReview: boolean;
 }
 
 /** What anyone signed in as the owner may see before paying: status, count, total, fee. */
@@ -208,11 +210,12 @@ export async function getFreeResult(deps: AuditDeps, userId: string, auditId: st
   await failStaleScans(deps, userId);
   const audit = await deps.repo.findAudit(userId, auditId);
   if (!audit) return null;
-  if (audit.totalOwedCents === null || audit.itemCount === null) return { audit, summary: null, decision: null };
+  if (audit.totalOwedCents === null || audit.itemCount === null) return { audit, summary: null, decision: null, paymentUnderReview: false };
   return {
     audit,
     summary: { itemCount: audit.itemCount, totalOwedCents: audit.totalOwedCents, linesScanned: audit.linesScanned ?? 0 },
     decision: unlockDecision(audit.totalOwedCents),
+    paymentUnderReview: audit.status === "preview_ready" && (await deps.repo.hasPaidPayment(auditId)),
   };
 }
 

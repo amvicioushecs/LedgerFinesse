@@ -1,5 +1,5 @@
 import Stripe from "stripe";
-import type { CheckoutGateway, CheckoutSessionInfo, CheckoutSessionInput } from "@/lib/payments/types";
+import type { CheckoutGateway, CheckoutSessionInfo, CheckoutSessionInput, RefundGateway } from "@/lib/payments/types";
 
 /**
  * Local stand-in for Stripe Checkout (STRIPE_MODE=mock; refused in production). "Paying" builds a
@@ -38,6 +38,11 @@ export class MockCheckoutGateway implements CheckoutGateway {
     const session = this.sessions.get(id);
     if (!session) throw new Error(`no mock session ${id}`);
     return this.view(session);
+  }
+
+  async expireSession(id: string): Promise<void> {
+    const session = this.sessions.get(id);
+    if (session?.status === "open") session.status = "expired";
   }
 
   /** Public details for the mock checkout page. */
@@ -79,5 +84,18 @@ export class MockCheckoutGateway implements CheckoutGateway {
 
   private view(s: MockSession): CheckoutSessionInfo {
     return { id: s.id, url: s.url, status: s.status };
+  }
+}
+
+/** Local refunds for the mock gateway: records them, moves no money. */
+export class MockRefundGateway implements RefundGateway {
+  readonly refunds = new Map<string, string>();
+
+  async refund(paymentIntentId: string, idempotencyKey: string): Promise<string> {
+    const existing = this.refunds.get(idempotencyKey);
+    if (existing) return existing;
+    const id = `re_mock_${paymentIntentId.slice(-12)}`;
+    this.refunds.set(idempotencyKey, id);
+    return id;
   }
 }

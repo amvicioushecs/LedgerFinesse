@@ -66,6 +66,7 @@ describe("scan", () => {
       audit: expect.objectContaining({ status: "preview_ready", totalOwedCents: 64000, itemCount: 5, feeCents: 9600 }),
       summary: { itemCount: 5, totalOwedCents: 64000, linesScanned: SAMPLE_CASE.extraction.ledger.length },
       decision: { kind: "checkout", feeCents: 9600 },
+      paymentUnderReview: false,
     });
     expect(JSON.stringify(result)).not.toMatch(/RUBS|Late Charge|1942/);
   });
@@ -137,6 +138,17 @@ describe("an audit never stays stuck in processing", () => {
     expect(await getAuditStatus(deps, OTHER, audit.id)).toBeNull();
     expect((await listAudits(deps, USER)).map((a) => a.status)).toEqual(["failed"]);
     expect((await getFreeResult(deps, USER, audit.id))?.audit.status).toBe("failed");
+  });
+});
+
+describe("a paid checkout that did not unlock", () => {
+  it("is reported as under review instead of offering checkout again", async () => {
+    const audit = await readyAudit();
+    await scanAudit(deps, USER, audit.id);
+    expect((await getFreeResult(deps, USER, audit.id))?.paymentUnderReview).toBe(false);
+    await deps.repo.insertPayment({ auditId: audit.id, userId: USER, checkoutSessionId: "cs_test_1", amountCents: 9600, status: "pending" });
+    expect(await deps.repo.applyCheckoutPaid({ eventId: "evt_1", eventType: "checkout.session.completed", checkoutSessionId: "cs_test_1", auditId: audit.id, amountCents: 100, currency: "usd", paymentIntentId: "pi_1" })).toBe("amount_mismatch");
+    expect((await getFreeResult(deps, USER, audit.id))?.paymentUnderReview).toBe(true);
   });
 });
 

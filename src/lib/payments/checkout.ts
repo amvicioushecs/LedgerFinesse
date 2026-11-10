@@ -6,7 +6,7 @@ import type { CheckoutGateway } from "@/lib/payments/types";
 export type StartCheckoutResult =
   | { kind: "redirect"; url: string }
   | { kind: "processing" }
-  | { kind: "no_checkout"; reason: "clean" | "unlocked" | "not_ready" }
+  | { kind: "no_checkout"; reason: "clean" | "unlocked" | "not_ready" | "under_review" }
   | { kind: "not_found" };
 
 interface Deps {
@@ -36,6 +36,9 @@ export async function startCheckout(
     throw new Error(`stored fee for audit ${auditId} does not match 15% of its total`);
   }
 
+  // Paid but not unlocked means a payment is under review; a second checkout would charge twice.
+  if (await deps.repo.hasPaidPayment(auditId)) return { kind: "no_checkout", reason: "under_review" };
+
   const pending = await deps.repo.findPendingPayment(auditId);
   if (pending) {
     const session = await deps.gateway.retrieveSession(pending.checkoutSessionId);
@@ -43,6 +46,8 @@ export async function startCheckout(
     if (session.status === "open" && session.url && pending.amountCents === decision.feeCents) {
       return { kind: "redirect", url: session.url };
     }
+    // Make the old session unpayable at Stripe before replacing it.
+    if (session.status === "open") await deps.gateway.expireSession(pending.checkoutSessionId);
     await deps.repo.setPaymentStatus(pending.checkoutSessionId, "expired");
   }
 

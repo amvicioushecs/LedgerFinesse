@@ -83,9 +83,22 @@ export type CheckoutPaidOutcome =
   | "unlocked"
   | "duplicate"
   | "already_unlocked"
+  | "duplicate_payment"
   | "amount_mismatch"
   | "unknown_session"
   | "not_unlockable";
+
+/** A paid session that did not unlock its audit (server-only `payment_reviews`). */
+export interface PaymentReview {
+  eventId: string;
+  reason: Exclude<CheckoutPaidOutcome, "unlocked" | "duplicate" | "already_unlocked">;
+  auditId: string | null;
+  checkoutSessionId: string;
+  paymentIntentId: string | null;
+  amountCents: number;
+  currency: string;
+  refundId: string | null;
+}
 
 export interface CheckoutPaidEvent {
   eventId: string;
@@ -122,7 +135,13 @@ export interface AuditRepository {
   /** Every checkout attempt ever recorded for the audit (any status). */
   countPayments(auditId: string): Promise<number>;
   setPaymentStatus(checkoutSessionId: string, status: PaymentRecord["status"]): Promise<void>;
+  /** Records the payment as paid whenever Stripe took money; flags anything that did not unlock. */
   applyCheckoutPaid(event: CheckoutPaidEvent): Promise<CheckoutPaidOutcome>;
+  /** True once any checkout for the audit was paid (unlocked or under review): never open another. */
+  hasPaidPayment(auditId: string): Promise<boolean>;
+  /** The duplicate charge from this event still waiting for its refund, if any. */
+  findRefundDue(eventId: string): Promise<{ paymentIntentId: string } | null>;
+  recordRefund(eventId: string, refundId: string): Promise<void>;
 }
 
 export interface DocumentStore {

@@ -1,6 +1,6 @@
 import Stripe from "stripe";
 import { formatUsd } from "@/lib/money";
-import type { CheckoutGateway, CheckoutSessionInfo, CheckoutSessionInput } from "@/lib/payments/types";
+import type { CheckoutGateway, CheckoutSessionInfo, CheckoutSessionInput, RefundGateway } from "@/lib/payments/types";
 
 /** Pinned so a dashboard upgrade can't change payload shapes under us. Matches stripe@23.1.0. */
 export const STRIPE_API_VERSION = "2026-10-28.endive";
@@ -60,5 +60,28 @@ export class StripeCheckoutGateway implements CheckoutGateway {
 
   async retrieveSession(id: string): Promise<CheckoutSessionInfo> {
     return toInfo(await this.stripe.checkout.sessions.retrieve(id));
+  }
+
+  async expireSession(id: string): Promise<void> {
+    try {
+      await this.stripe.checkout.sessions.expire(id);
+    } catch (error) {
+      // Already complete or expired: re-read so a session that just completed is never treated as replaceable.
+      const session = await this.stripe.checkout.sessions.retrieve(id);
+      if (session.status === "open") throw error;
+      if (session.status === "complete") throw new Error(`checkout session ${id} completed while being replaced`);
+    }
+  }
+}
+
+export class StripeRefundGateway implements RefundGateway {
+  constructor(private readonly stripe: Stripe) {}
+
+  async refund(paymentIntentId: string, idempotencyKey: string): Promise<string> {
+    const refund = await this.stripe.refunds.create(
+      { payment_intent: paymentIntentId, reason: "duplicate", metadata: { reason: "ledgerfinesse_duplicate_checkout" } },
+      { idempotencyKey },
+    );
+    return refund.id;
   }
 }

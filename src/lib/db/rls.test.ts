@@ -30,7 +30,7 @@ const rows = async (sql: string, params: unknown[] = []) => (await db.query<Reco
 
 async function seed() {
   await db.exec(`
-    truncate public.stripe_events, public.payments, public.letters, public.findings, public.extractions,
+    truncate public.payment_reviews, public.stripe_events, public.payments, public.letters, public.findings, public.extractions,
       public.documents, public.audits, public.profiles, auth.users, storage.objects cascade;
     insert into auth.users (id, email) values ('${A}', 'a@example.test'), ('${B}', 'b@example.test');
     insert into public.audits (id, user_id, status, jurisdiction_key, total_owed_cents, item_count, lines_scanned, fee_cents)
@@ -49,10 +49,10 @@ async function seed() {
   `);
 }
 
-const pay = (eventId: string, session: string, audit: string, amount: number) =>
+const pay = (eventId: string, session: string, audit: string, amount: number, paymentIntent = `pi_${session}`) =>
   as("service_role", null, async () =>
-    (await rows(`select public.apply_checkout_paid($1, 'checkout.session.completed', $2, $3, $4, 'usd', 'pi_test') as r`,
-      [eventId, session, audit, amount]))[0].r as string);
+    (await rows(`select public.apply_checkout_paid($1, 'checkout.session.completed', $2, $3, $4, 'usd', $5) as r`,
+      [eventId, session, audit, amount, paymentIntent]))[0].r as string);
 
 beforeAll(async () => {
   db = new PGlite();
@@ -82,6 +82,7 @@ describe("owner isolation", () => {
   it("server-only tables are closed to renters", async () => {
     await expect(as("authenticated", A, () => rows("select * from public.extractions"))).rejects.toThrow(/permission denied/);
     await expect(as("authenticated", A, () => rows("select * from public.stripe_events"))).rejects.toThrow(/permission denied/);
+    await expect(as("authenticated", A, () => rows("select * from public.payment_reviews"))).rejects.toThrow(/permission denied/);
   });
 });
 
@@ -112,9 +113,31 @@ describe("paywall", () => {
 });
 
 describe("apply_checkout_paid", () => {
-  it("refuses an amount that differs from the stored 15% fee", async () => {
+  it("refuses an amount that differs from the stored 15% fee but records the payment and flags it", async () => {
     expect(await pay("evt_2", "cs_test_a", AUDIT_A, 100)).toBe("amount_mismatch");
     expect((await rows("select status from public.audits where id = $1", [AUDIT_A]))[0].status).toBe("preview_ready");
+    expect((await rows("select status, paid_at is not null as paid from public.payments where stripe_checkout_session_id = 'cs_test_a'"))[0]).toEqual({ status: "paid", paid: true });
+    expect(await rows("select event_id, reason, amount_cents, refund_id from public.payment_reviews")).toEqual([
+      { event_id: "evt_2", reason: "amount_mismatch", amount_cents: 100, refund_id: null },
+    ]);
+  });
+
+  it("flags a second paid session for an unlocked audit as a duplicate payment, then records its refund", async () => {
+    await db.exec(`insert into public.payments (audit_id, user_id, stripe_checkout_session_id, amount_cents) values ('${AUDIT_A}', '${A}', 'cs_test_a2', 9600)`);
+    expect(await pay("evt_6", "cs_test_a", AUDIT_A, 9600)).toBe("unlocked");
+    expect(await pay("evt_7", "cs_test_a2", AUDIT_A, 9600)).toBe("duplicate_payment");
+    expect(await rows("select event_id, reason from public.payment_reviews")).toEqual([{ event_id: "evt_7", reason: "duplicate_payment" }]);
+    expect(await as("service_role", null, () => rows("select public.record_refund('evt_7', 're_test_1') as ok"))).toEqual([{ ok: true }]);
+    expect((await rows("select status from public.payments where stripe_checkout_session_id = 'cs_test_a2'"))[0].status).toBe("refunded");
+    expect((await rows("select refund_id from public.payment_reviews where event_id = 'evt_7'"))[0].refund_id).toBe("re_test_1");
+    await expect(as("authenticated", A, () => rows("select public.record_refund('evt_7', 're_x')"))).rejects.toThrow(/permission denied/);
+  });
+
+  it("flags an unknown session", async () => {
+    expect(await pay("evt_8", "cs_test_nope", AUDIT_A, 9600)).toBe("unknown_session");
+    expect(await rows("select event_id, reason, checkout_session_id from public.payment_reviews")).toEqual([
+      { event_id: "evt_8", reason: "unknown_session", checkout_session_id: "cs_test_nope" },
+    ]);
   });
 
   it("dedupes a redelivered event and treats a new event after unlock as already unlocked", async () => {

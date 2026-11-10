@@ -269,6 +269,34 @@ export class SupabaseAuditRepository implements AuditRepository {
     );
     return data as CheckoutPaidOutcome;
   }
+
+  async hasPaidPayment(auditId: string) {
+    const { count, error } = await this.admin
+      .from("payments")
+      .select("id", { count: "exact", head: true })
+      .eq("audit_id", auditId)
+      .in("status", ["paid", "refunded"]);
+    if (error) throw new Error(`has paid payment: ${error.message}`);
+    return (count ?? 0) > 0;
+  }
+
+  async findRefundDue(eventId: string) {
+    const data = check(
+      await this.admin
+        .from("payment_reviews")
+        .select("payment_intent_id")
+        .eq("event_id", eventId)
+        .eq("reason", "duplicate_payment")
+        .is("refund_id", null)
+        .maybeSingle(),
+      "find refund due",
+    ) as { payment_intent_id: string | null } | null;
+    return data?.payment_intent_id ? { paymentIntentId: data.payment_intent_id } : null;
+  }
+
+  async recordRefund(eventId: string, refundId: string) {
+    check(await this.admin.rpc("record_refund", { p_event_id: eventId, p_refund_id: refundId }), "record refund");
+  }
 }
 
 /** Private `documents` bucket, written with the service role after server-side checks. */
