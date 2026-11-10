@@ -296,8 +296,8 @@ function rateLimitStore(env: ServerEnv): RateLimitStore {
 export function rateLimited(request: Request, action: RateLimitedAction, subject: string | null): Promise<boolean> {
   const env = serverEnv();
   return isRateLimited(
-    { store: rateLimitStore(env), limits: env.rateLimits, failOpen: env.siteEnv === "development" },
+    { store: rateLimitStore(env), limits: env.rateLimits, ipLimit: env.ipRateLimit, failOpen: env.siteEnv === "development" },
     action,
-    { ip: clientIp(request.headers), subject },
+    { ip: clientIp(request.headers, env.trustedIpHeader), subject },
   );
 }

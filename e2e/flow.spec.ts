@@ -3,7 +3,6 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 /** A fresh client IP per auth test so the 10/min sign-in limit (live under miniflare too) isn't shared across tests. */
-const freshIp = () => `10.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
 
 const SHOTS = process.env.SCREENSHOT_DIR ?? "/workspace/ledgerfinesse/screenshots/v2";
 mkdirSync(SHOTS, { recursive: true });
@@ -145,11 +144,10 @@ test("malformed audit ids are 404s, not server errors", async ({ request, baseUR
 });
 
 test("sign-in never redirects off-site, even through dot-segment tricks", async ({ request, baseURL }) => {
-  const ip = freshIp();
   for (const next of ["/.//evil.com", "/%2e%2e//evil.com", "//evil.com"]) {
     const res = await request.post("/auth/signin", {
       form: { email: `redirect-${Date.now()}@example.test`, next, locale: "en" },
-      headers: { origin: baseURL!, "cf-connecting-ip": ip },
+      headers: { origin: baseURL! },
       maxRedirects: 0,
     });
     expect(res.status(), next).toBe(303);
@@ -160,7 +158,6 @@ test("sign-in never redirects off-site, even through dot-segment tricks", async 
 test("password sign-up, wrong password, sign-in, reset email and new password (local dev backend)", async ({ page, context }) => {
   const email = `pw-${test.info().project.name}-${Date.now()}@example.test`;
   const form = page.getByTestId("password-form");
-  await page.setExtraHTTPHeaders({ "cf-connecting-ip": freshIp() });
   await page.goto(`/en/signin?next=${encodeURIComponent("/en/audits/new")}`);
   await form.locator('input[name="email"]').fill(email);
   await form.locator('input[name="password"]').fill("first password");

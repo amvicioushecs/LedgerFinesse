@@ -79,6 +79,15 @@ describe("parseServerEnv", () => {
     expect(() => parseServerEnv({ LF_RATE_LIMIT_UPLOAD: "0/60" })).toThrow(/LF_RATE_LIMIT_UPLOAD/);
   });
 
+  it("trusts no client-IP header unless LF_TRUSTED_IP_HEADER names one; per-IP limit defaults to 100/60", () => {
+    expect(parseServerEnv({}).trustedIpHeader).toBeNull();
+    expect(parseServerEnv({ LF_TRUSTED_IP_HEADER: " X-Real-IP " }).trustedIpHeader).toBe("x-real-ip");
+    expect(() => parseServerEnv({ LF_TRUSTED_IP_HEADER: "bad header" })).toThrow(/LF_TRUSTED_IP_HEADER/);
+    expect(parseServerEnv({}).ipRateLimit).toEqual({ limit: 100, windowSeconds: 60 });
+    expect(parseServerEnv({ LF_RATE_LIMIT_IP: "300/60" }).ipRateLimit).toEqual({ limit: 300, windowSeconds: 60 });
+    expect(() => parseServerEnv({ LF_RATE_LIMIT_IP: "many" })).toThrow(/LF_RATE_LIMIT_IP must look like 100\/60/);
+  });
+
   it("refuses live Stripe keys outside production", () => {
     expect(() => parseServerEnv({ STRIPE_MODE: "stripe", STRIPE_SECRET_KEY: "sk_live_1", STRIPE_WEBHOOK_SECRET: "whsec_1" })).toThrow(/live Stripe key/);
     expect(() => parseServerEnv({ STRIPE_MODE: "stripe", STRIPE_SECRET_KEY: "rk_live_1", STRIPE_WEBHOOK_SECRET: "whsec_1" })).toThrow(/live Stripe key/);
