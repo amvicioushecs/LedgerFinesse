@@ -34,13 +34,18 @@ const clean = (value: string | null, max: number) => {
   return trimmed === "" ? null : trimmed.slice(0, max);
 };
 
-/** Daily cap: each scan costs a model call, so one account can't run unlimited scans. */
+const capWindowStart = (deps: AuditDeps) => new Date(deps.now().getTime() - 24 * 60 * 60_000).toISOString();
+
+/**
+ * Daily cap: each scan costs a model call, so one account can't run unlimited scans. This early check lets the
+ * route refuse before reading the upload; createAudit enforces the cap atomically.
+ */
 export async function canStartAudit(deps: AuditDeps, userId: string): Promise<boolean> {
-  const since = new Date(deps.now().getTime() - 24 * 60 * 60_000).toISOString();
-  return (await deps.repo.countAuditsSince(userId, since)) < deps.dailyAuditLimit;
+  return (await deps.repo.countAuditsSince(userId, capWindowStart(deps))) < deps.dailyAuditLimit;
 }
 
-export async function createAudit(deps: AuditDeps, userId: string, input: NewAuditInput): Promise<AuditRecord> {
+/** The new draft audit, or null when the user is at the daily cap (checked and inserted atomically). */
+export async function createAudit(deps: AuditDeps, userId: string, input: NewAuditInput): Promise<AuditRecord | null> {
   const audit: AuditRecord = {
     id: deps.newId(),
     userId,
@@ -57,8 +62,7 @@ export async function createAudit(deps: AuditDeps, userId: string, input: NewAud
     unlockedAt: null,
     createdAt: deps.now().toISOString(),
   };
-  await deps.repo.insertAudit(audit);
-  return audit;
+  return (await deps.repo.insertAuditWithinCap(audit, capWindowStart(deps), deps.dailyAuditLimit)) ? audit : null;
 }
 
 type Failure<R extends string> = { ok: false; reason: R };

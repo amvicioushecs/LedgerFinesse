@@ -178,6 +178,28 @@ describe("apply_checkout_paid", () => {
   });
 });
 
+describe("insert_audit_within_cap (N4)", () => {
+  const insert = (id: string, limit: number) =>
+    as("service_role", null, async () => (await rows(
+      `select public.insert_audit_within_cap($1, $2, 'en', 'san-diego-ca', null, null, null, now() - interval '24 hours', $3) as ok`,
+      [id, B, limit]))[0].ok);
+
+  it("inserts only while the user is under the cap, serialized per user with an advisory lock", async () => {
+    // B already has one audit from the seed.
+    expect(await insert("30000000-0000-4000-8000-000000000001", 2)).toBe(true);
+    expect(await insert("30000000-0000-4000-8000-000000000002", 2)).toBe(false);
+    expect((await rows("select count(*)::int as n from public.audits where user_id = $1", [B]))[0].n).toBe(2);
+    const fn = (await rows("select prosrc from pg_proc where proname = 'insert_audit_within_cap'"))[0].prosrc as string;
+    expect(fn).toMatch(/pg_advisory_xact_lock/);
+  });
+
+  it("is service-role only", async () => {
+    await expect(as("authenticated", B, () => rows(
+      `select public.insert_audit_within_cap($1, $2, 'en', 'san-diego-ca', null, null, null, now(), 10)`, ["30000000-0000-4000-8000-000000000003", B])))
+      .rejects.toThrow(/permission denied/);
+  });
+});
+
 describe("refund policy (Hector, 2026-11-10)", () => {
   const refund = (eventId: string, refundId: string, amount: number) =>
     as("service_role", null, async () => (await rows("select public.record_refund($1, $2, $3) as ok", [eventId, refundId, amount]))[0].ok);

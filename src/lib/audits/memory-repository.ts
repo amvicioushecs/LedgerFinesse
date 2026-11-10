@@ -31,6 +31,14 @@ export class MemoryAuditRepository implements AuditRepository {
       .map((a) => ({ ...a }));
   }
 
+  /** Check and insert happen without an await in between, so concurrent calls can't overshoot. */
+  async insertAuditWithinCap(audit: AuditRecord, since: string, limit: number) {
+    const started = [...this.audits.values()].filter((a) => a.userId === audit.userId && a.createdAt >= since).length;
+    if (started >= limit) return false;
+    this.audits.set(audit.id, { ...audit });
+    return true;
+  }
+
   async countAuditsSince(userId: string, since: string) {
     return [...this.audits.values()].filter((a) => a.userId === userId && a.createdAt >= since).length;
   }

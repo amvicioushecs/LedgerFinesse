@@ -267,6 +267,24 @@ end $$;
 revoke all on function public.record_refund(text, text, bigint) from public, anon, authenticated;
 grant execute on function public.record_refund(text, text, bigint) to service_role;
 
+-- ---------------------------------------------------------------- new audit within the daily cap (service role only)
+-- Count and insert under a per-user transaction advisory lock, so concurrent uploads can't overshoot the cap.
+create or replace function public.insert_audit_within_cap(
+  p_id uuid, p_user_id uuid, p_locale text, p_jurisdiction_key text,
+  p_tenant_name text, p_landlord_name text, p_property_address text, p_since timestamptz, p_limit integer
+) returns boolean language plpgsql security definer set search_path = '' as $$
+begin
+  perform pg_advisory_xact_lock(hashtextextended('lf_daily_audit_cap:' || p_user_id::text, 0));
+  if (select count(*) from public.audits where user_id = p_user_id and created_at >= p_since) >= p_limit then
+    return false;
+  end if;
+  insert into public.audits (id, user_id, status, locale, jurisdiction_key, tenant_name, landlord_name, property_address)
+  values (p_id, p_user_id, 'draft', p_locale, p_jurisdiction_key, p_tenant_name, p_landlord_name, p_property_address);
+  return true;
+end $$;
+revoke all on function public.insert_audit_within_cap(uuid, uuid, text, text, text, text, text, timestamptz, integer) from public, anon, authenticated;
+grant execute on function public.insert_audit_within_cap(uuid, uuid, text, text, text, text, text, timestamptz, integer) to service_role;
+
 -- ---------------------------------------------------------------- save scan (service role only)
 -- Stores the engine output in one transaction. Only a 'processing' audit can be completed, and only as
 -- preview_ready (a fee to pay), clean, or unlocked free when 1-49 cents is owed. Paid unlocks go through apply_checkout_paid.

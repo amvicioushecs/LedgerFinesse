@@ -27,7 +27,7 @@ beforeEach(() => {
 
 async function readyAudit(extractor?: Extractor) {
   if (extractor) deps.extractor = extractor;
-  const audit = await createAudit(deps, USER, { locale: "en", jurisdiction: "san-diego-ca", landlordName: SAMPLE_CASE.landlord, tenantName: null, propertyAddress: null });
+  const audit = (await createAudit(deps, USER, { locale: "en", jurisdiction: "san-diego-ca", landlordName: SAMPLE_CASE.landlord, tenantName: null, propertyAddress: null }))!;
   expect((await attachDocument(deps, USER, audit.id, { kind: "lease", bytes: PDF, declaredType: "application/pdf" })).ok).toBe(true);
   expect((await attachDocument(deps, USER, audit.id, { kind: "ledger", bytes: PNG, declaredType: "image/png" })).ok).toBe(true);
   return audit;
@@ -45,6 +45,16 @@ describe("daily audit cap", () => {
     deps.now = () => new Date("2026-11-10T18:00:01Z");
     expect(await canStartAudit(deps, USER)).toBe(true);
   });
+
+  it("enforces the cap atomically at insert, so concurrent requests can't overshoot it (N4)", async () => {
+    deps.dailyAuditLimit = 2;
+    const input = { locale: "en" as const, jurisdiction: "san-diego-ca" as const, landlordName: null, tenantName: null, propertyAddress: null };
+    // All five passed the early canStartAudit check before any insert happened.
+    const created = await Promise.all(Array.from({ length: 5 }, () => createAudit(deps, USER, input)));
+    expect(created.filter(Boolean)).toHaveLength(2);
+    expect(created.filter((a) => a === null)).toHaveLength(3);
+    expect(await deps.repo.countAuditsSince(USER, "2026-11-08T18:00:00Z")).toBe(2);
+  });
 });
 
 describe("upload", () => {
@@ -59,7 +69,7 @@ describe("upload", () => {
   });
 
   it("rejects disguised files and other users' audits", async () => {
-    const audit = await createAudit(deps, USER, { locale: "en", jurisdiction: "san-diego-ca", landlordName: null, tenantName: null, propertyAddress: null });
+    const audit = (await createAudit(deps, USER, { locale: "en", jurisdiction: "san-diego-ca", landlordName: null, tenantName: null, propertyAddress: null }))!;
     const html = new TextEncoder().encode("<html>hi</html>");
     expect(await attachDocument(deps, USER, audit.id, { kind: "lease", bytes: html, declaredType: "application/pdf" })).toEqual({ ok: false, reason: "unsupported_type" });
     expect(await attachDocument(deps, OTHER, audit.id, { kind: "lease", bytes: PDF, declaredType: "application/pdf" })).toEqual({ ok: false, reason: "not_found" });
@@ -68,7 +78,7 @@ describe("upload", () => {
 
 describe("scan", () => {
   it("needs both a lease and a ledger", async () => {
-    const audit = await createAudit(deps, USER, { locale: "en", jurisdiction: "san-diego-ca", landlordName: null, tenantName: null, propertyAddress: null });
+    const audit = (await createAudit(deps, USER, { locale: "en", jurisdiction: "san-diego-ca", landlordName: null, tenantName: null, propertyAddress: null }))!;
     await attachDocument(deps, USER, audit.id, { kind: "lease", bytes: PDF, declaredType: "application/pdf" });
     expect(await scanAudit(deps, USER, audit.id)).toEqual({ ok: false, reason: "missing_documents" });
   });

@@ -147,6 +147,23 @@ export class SupabaseAuditRepository implements AuditRepository {
     }));
   }
 
+  async insertAuditWithinCap(a: AuditRecord, since: string, limit: number) {
+    return check(
+      await this.admin.rpc("insert_audit_within_cap", {
+        p_id: a.id,
+        p_user_id: a.userId,
+        p_locale: a.locale,
+        p_jurisdiction_key: a.jurisdiction,
+        p_tenant_name: a.tenantName,
+        p_landlord_name: a.landlordName,
+        p_property_address: a.propertyAddress,
+        p_since: since,
+        p_limit: limit,
+      }),
+      "insert audit within cap",
+    ) as boolean;
+  }
+
   async countAuditsSince(userId: string, since: string) {
     const { count, error } = await this.admin
       .from("audits")

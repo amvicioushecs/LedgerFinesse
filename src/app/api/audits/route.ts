@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
   const { form } = parsed;
 
   const audit = await createAudit(deps, user.id, form);
+  if (!audit) return NextResponse.redirect(new URL(`/${form.locale}/audits/new?error=daily`, request.url), 303);
   for (const file of form.files) {
     const attached = await attachDocument(deps, user.id, audit.id, file);
     if (!attached.ok) return NextResponse.redirect(new URL(`/${form.locale}/audits/new?error=generic`, request.url), 303);
