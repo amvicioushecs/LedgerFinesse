@@ -2,7 +2,7 @@
 
 Audits a renter's rent ledger against their lease. The free scan returns the number of disputed charges and the total. The itemized breakdown and the dispute letter unlock for a flat 15% of the money owed, charged through Stripe Checkout. LedgerFinesse is not a law firm and does not give legal advice.
 
-Next.js 16 (App Router) on Cloudflare Workers via OpenNext, Supabase (Postgres, Auth, Storage), Stripe Checkout, Gemini for document extraction only.
+Next.js 16 (App Router) built as an OpenNext worker (`npm run build:cf`) for Spacefast Functions, Supabase (Postgres, Auth, Storage), Stripe Checkout, Gemini for document extraction only.
 
 ## Requirements
 - Node 24 (`nvm use` reads `.nvmrc`).
@@ -35,7 +35,7 @@ With no env set, the app runs fully local (development only). It uses an in-memo
 - The fee is computed on the server from the stored audit. An audit unlocks only on a verified webhook that reports `payment_status=paid` and an amount matching the stored fee. Returning to the success URL never unlocks anything.
 
 ## Rate limits
-Workers rate-limit bindings in `wrangler.jsonc` (`UPLOAD_RATE_LIMITER`, `SIGNIN_RATE_LIMITER`, `CHECKOUT_RATE_LIMITER`). Each one counts per IP and per user (or sign-in email). Change `simple.limit` to tune them. Under `next start` there are no bindings, so nothing is limited. The daily audit cap applies everywhere.
+Fixed-window counters in Supabase Postgres (`public.rate_limits`, atomic `rate_limit_hit` RPC, service role only). Upload, sign-in (magic link, password, reset) and checkout each count per IP and per user (or sign-in email). Defaults: upload 10/60s, sign-in 10/60s, checkout 20/60s; override with `LF_RATE_LIMIT_UPLOAD|SIGNIN|CHECKOUT=hits/seconds`. If the limiter can't be reached the request is refused, except in `SITE_ENV=development`. The memory backend (development only) counts in process. The daily audit cap (`LF_DAILY_AUDIT_LIMIT`) is enforced atomically at insert. Per-IP keys use `cf-connecting-ip`, then the first `x-forwarded-for` hop: confirm which header Spacefast sets.
 
 ## Scripts
 | Script | What it does |

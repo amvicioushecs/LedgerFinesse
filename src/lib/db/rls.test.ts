@@ -30,7 +30,7 @@ const rows = async (sql: string, params: unknown[] = []) => (await db.query<Reco
 
 async function seed() {
   await db.exec(`
-    truncate public.payment_reviews, public.stripe_events, public.payments, public.letters, public.findings, public.extractions,
+    truncate public.rate_limits, public.payment_reviews, public.stripe_events, public.payments, public.letters, public.findings, public.extractions,
       public.documents, public.audits, public.profiles, auth.users, storage.objects cascade;
     insert into auth.users (id, email) values ('${A}', 'a@example.test'), ('${B}', 'b@example.test');
     insert into public.audits (id, user_id, status, jurisdiction_key, total_owed_cents, item_count, lines_scanned, fee_cents)
@@ -175,6 +175,34 @@ describe("apply_checkout_paid", () => {
 
   it("rejects a session that belongs to another audit", async () => {
     expect(await pay("evt_5", "cs_test_b", AUDIT_A, 1500)).toBe("unknown_session");
+  });
+});
+
+describe("rate_limit_hit (fixed-window limiter)", () => {
+  const hit = (keys: string[], limit: number, at = "2026-11-10T08:00:05Z") =>
+    as("service_role", null, async () =>
+      (await rows("select public.rate_limit_hit($1::text[], $2, 60, $3::timestamptz) as limited", [keys, limit, at]))[0].limited);
+
+  it("counts every key with an atomic upsert-increment and limits once any key is over", async () => {
+    expect(await hit(["signin:ip:1", "signin:subject:a"], 2)).toBe(false);
+    expect(await hit(["signin:ip:1", "signin:subject:a"], 2)).toBe(false);
+    expect(await hit(["signin:ip:1", "signin:subject:b"], 2)).toBe(true); // ip over
+    expect(await hit(["signin:ip:2", "signin:subject:b"], 2)).toBe(false);
+    expect(await rows("select bucket, hits from public.rate_limits order by bucket")).toEqual([
+      { bucket: "signin:ip:1", hits: 3 }, { bucket: "signin:ip:2", hits: 1 }, { bucket: "signin:subject:a", hits: 2 }, { bucket: "signin:subject:b", hits: 2 },
+    ]);
+  });
+
+  it("starts a new window after the period", async () => {
+    expect(await hit(["upload:ip:1"], 1, "2026-11-10T08:00:05Z")).toBe(false);
+    expect(await hit(["upload:ip:1"], 1, "2026-11-10T08:00:59Z")).toBe(true);
+    expect(await hit(["upload:ip:1"], 1, "2026-11-10T08:01:00Z")).toBe(false);
+  });
+
+  it("is server-only: no renter can call it or read the table", async () => {
+    await expect(as("authenticated", A, () => rows("select public.rate_limit_hit(array['x'], 1, 60, now())"))).rejects.toThrow(/permission denied/);
+    await expect(as("anon", null, () => rows("select public.rate_limit_hit(array['x'], 1, 60, now())"))).rejects.toThrow(/permission denied/);
+    await expect(as("authenticated", A, () => rows("select * from public.rate_limits"))).rejects.toThrow(/permission denied/);
   });
 });
 

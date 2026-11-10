@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
 const nextConfig: NextConfig = {
   // cacheComponents/partialPrefetching stay OFF: with @opennextjs/cloudflare 1.20.13 any page rendered at
@@ -17,6 +16,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-
-// Lets `next dev` read Cloudflare bindings from wrangler.jsonc / .dev.vars.
-initOpenNextCloudflareForDev();

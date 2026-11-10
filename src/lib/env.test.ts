@@ -21,6 +21,14 @@ describe("parseServerEnv", () => {
     expect(() => parseServerEnv({ NODE_ENV: "production", SITE_ENV: "  " })).toThrow(/SITE_ENV is required/);
     expect(parseServerEnv({ NODE_ENV: "production", SITE_ENV: "development" }).siteEnv).toBe("development");
     expect(parseServerEnv({ NODE_ENV: "development" }).siteEnv).toBe("development");
+    expect(parseServerEnv({ NODE_ENV: "test" }).siteEnv).toBe("development");
+    // Anything else a server reports (including empty) is hosted.
+    expect(() => parseServerEnv({ NODE_ENV: "" })).toThrow(/SITE_ENV is required/);
+  });
+
+  it("lets `next build` prerender without SITE_ENV (the build is not a hosted server; runtime still requires it)", () => {
+    expect(parseServerEnv({ NODE_ENV: "production", NEXT_PHASE: "phase-production-build" }).siteEnv).toBe("development");
+    expect(() => parseServerEnv({ NODE_ENV: "production", NEXT_PHASE: "phase-production-server" })).toThrow(/SITE_ENV is required/);
   });
 
   it("parses a real Supabase + Stripe test configuration", () => {
@@ -60,6 +68,15 @@ describe("parseServerEnv", () => {
     expect(parseServerEnv({ LF_DAILY_AUDIT_LIMIT: "3" }).dailyAuditLimit).toBe(3);
     expect(() => parseServerEnv({ LF_DAILY_AUDIT_LIMIT: "0" })).toThrow(/LF_DAILY_AUDIT_LIMIT/);
     expect(() => parseServerEnv({ LF_DAILY_AUDIT_LIMIT: "lots" })).toThrow(/LF_DAILY_AUDIT_LIMIT/);
+  });
+
+  it("reads rate limits as limit/seconds per action, defaulting to the previous values", () => {
+    expect(parseServerEnv({}).rateLimits).toEqual({
+      upload: { limit: 10, windowSeconds: 60 }, signin: { limit: 10, windowSeconds: 60 }, checkout: { limit: 20, windowSeconds: 60 },
+    });
+    expect(parseServerEnv({ LF_RATE_LIMIT_SIGNIN: "5/300" }).rateLimits.signin).toEqual({ limit: 5, windowSeconds: 300 });
+    expect(() => parseServerEnv({ LF_RATE_LIMIT_CHECKOUT: "lots" })).toThrow(/LF_RATE_LIMIT_CHECKOUT must look like 20\/60/);
+    expect(() => parseServerEnv({ LF_RATE_LIMIT_UPLOAD: "0/60" })).toThrow(/LF_RATE_LIMIT_UPLOAD/);
   });
 
   it("refuses live Stripe keys outside production", () => {

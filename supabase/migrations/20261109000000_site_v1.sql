@@ -267,6 +267,40 @@ end $$;
 revoke all on function public.record_refund(text, text, bigint) from public, anon, authenticated;
 grant execute on function public.record_refund(text, text, bigint) to service_role;
 
+-- ---------------------------------------------------------------- rate limits (server only)
+-- Fixed-window request counters (src/lib/rate-limit.ts): one row per key ("signin:ip:1.2.3.4",
+-- "upload:subject:<user id>") per window. Replaces the Cloudflare rate-limit bindings (Spacefast has none).
+create table public.rate_limits (
+  bucket        text not null check (char_length(bucket) <= 400),
+  window_start  timestamptz not null,
+  hits          integer not null default 1,
+  primary key (bucket, window_start)
+);
+create index rate_limits_window_idx on public.rate_limits (window_start);
+
+-- Counts one hit for every key in the current window with an atomic upsert-increment and returns true when any
+-- key is now over p_limit. p_now is for tests; callers pass now(). Old windows are swept about once per 100 calls.
+create or replace function public.rate_limit_hit(p_keys text[], p_limit integer, p_window_seconds integer, p_now timestamptz default now())
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare
+  v_window timestamptz := to_timestamp(floor(extract(epoch from p_now) / p_window_seconds) * p_window_seconds);
+  v_max integer;
+begin
+  with counted as (
+    insert into public.rate_limits as r (bucket, window_start)
+    select distinct k, v_window from unnest(p_keys) as k
+    on conflict (bucket, window_start) do update set hits = r.hits + 1
+    returning r.hits
+  )
+  select max(hits) into v_max from counted;
+  if random() < 0.01 then
+    delete from public.rate_limits where window_start < p_now - interval '1 day';
+  end if;
+  return coalesce(v_max, 0) > p_limit;
+end $$;
+revoke all on function public.rate_limit_hit(text[], integer, integer, timestamptz) from public, anon, authenticated;
+grant execute on function public.rate_limit_hit(text[], integer, integer, timestamptz) to service_role;
+
 -- ---------------------------------------------------------------- new audit within the daily cap (service role only)
 -- Count and insert under a per-user transaction advisory lock, so concurrent uploads can't overshoot the cap.
 create or replace function public.insert_audit_within_cap(
@@ -349,10 +383,12 @@ alter table public.letters       enable row level security;
 alter table public.payments      enable row level security;
 alter table public.stripe_events enable row level security;  -- no policies: service role only
 alter table public.payment_reviews enable row level security;  -- no policies: service role only
+alter table public.rate_limits   enable row level security;  -- no policies: service role only
 
 -- Renters never write through the Data API; every write goes through a server route.
 revoke all on public.profiles, public.audits, public.documents, public.extractions,
-  public.findings, public.letters, public.payments, public.stripe_events, public.payment_reviews from anon, authenticated;
+  public.findings, public.letters, public.payments, public.stripe_events, public.payment_reviews, public.rate_limits
+  from anon, authenticated;
 grant select on public.profiles, public.audits, public.documents, public.findings,
   public.letters, public.payments to authenticated;
 

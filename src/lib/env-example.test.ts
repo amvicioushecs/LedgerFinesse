@@ -12,7 +12,7 @@ describe(".env.example", () => {
     expect(listed.filter(([, , value]) => value !== "")).toEqual([]);
     const read = [...new Set([...source.matchAll(/(?:raw\.|need\("|pick\(raw, ")([A-Z][A-Z0-9_]+)/g)].map((m) => m[1]))]
       // Set by Next/the runtime, not by whoever deploys.
-      .filter((name) => name !== "NODE_ENV");
+      .filter((name) => name !== "NODE_ENV" && name !== "NEXT_PHASE");
     expect(read.length).toBeGreaterThan(10);
     expect(listed.map(([, name]) => name)).toEqual(expect.arrayContaining(read));
   });

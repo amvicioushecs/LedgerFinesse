@@ -1,7 +1,6 @@
 import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { cookies } from "next/headers";
 import { MemoryAuditRepository, MemoryDocumentStore } from "@/lib/audits/memory-repository";
 import type { AuditDeps } from "@/lib/audits/service";
@@ -18,7 +17,7 @@ import type { Locale } from "@/lib/i18n/locales";
 import { MOCK_WEBHOOK_SECRET, MockCheckoutGateway, MockRefundGateway, mockStripe } from "@/lib/payments/mock-gateway";
 import { createStripeClient, StripeCheckoutGateway, StripeRefundGateway } from "@/lib/payments/stripe-gateway";
 import type { CheckoutGateway, RefundGateway } from "@/lib/payments/types";
-import { RATE_LIMIT_BINDINGS, clientIp, isRateLimited, type Limiters, type RateLimitedAction } from "@/lib/rate-limit";
+import { MemoryRateLimitStore, clientIp, isRateLimited, type RateLimitStore, type RateLimitedAction } from "@/lib/rate-limit";
 import type Stripe from "stripe";
 
 export interface CurrentUser {
@@ -36,6 +35,7 @@ const local = globalThis as typeof globalThis & {
   __lfMockGateway?: MockCheckoutGateway;
   __lfMockRefunds?: MockRefundGateway;
   __lfPasswords?: MemoryPasswordProvider;
+  __lfRateLimits?: MemoryRateLimitStore;
 };
 
 function memory() {
@@ -211,16 +211,28 @@ export function isSameOrigin(request: Request): boolean {
   return origin === new URL(request.url).origin || origin === serverEnv().appUrl;
 }
 
-/** Workers rate-limit bindings when running on Cloudflare (or wrangler dev); none under `next start`. */
-function limiters(): Limiters {
-  try {
-    const env = getCloudflareContext().env as unknown as Limiters;
-    return Object.fromEntries(Object.values(RATE_LIMIT_BINDINGS).map((name) => [name, env[name]]));
-  } catch {
-    return {};
+/** Postgres fixed-window counters (service role); the development-only memory backend counts in process. */
+function rateLimitStore(env: ServerEnv): RateLimitStore {
+  if (env.backend === "memory") {
+    local.__lfRateLimits ??= new MemoryRateLimitStore();
+    return local.__lfRateLimits;
   }
+  const admin = supabaseAdmin(env);
+  return {
+    async hit(keys, limit, windowSeconds) {
+      const { data, error } = await admin.rpc("rate_limit_hit", { p_keys: keys, p_limit: limit, p_window_seconds: windowSeconds });
+      if (error) throw new Error(`rate_limit_hit: ${error.message}`);
+      return data === true;
+    },
+  };
 }
 
+/** Fails closed (refuses the request) if the limiter is unreachable, except in development. */
 export function rateLimited(request: Request, action: RateLimitedAction, subject: string | null): Promise<boolean> {
-  return isRateLimited(limiters(), action, { ip: clientIp(request.headers), subject });
+  const env = serverEnv();
+  return isRateLimited(
+    { store: rateLimitStore(env), limits: env.rateLimits, failOpen: env.siteEnv === "development" },
+    action,
+    { ip: clientIp(request.headers), subject },
+  );
 }

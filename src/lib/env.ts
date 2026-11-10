@@ -4,6 +4,8 @@
  * non-production refuses live Stripe keys.
  */
 
+import { DEFAULT_RATE_LIMITS, type RateLimitedAction, type RateLimits } from "@/lib/rate-limit";
+
 export interface ServerEnv {
   siteEnv: "development" | "preview" | "production";
   backend: "memory" | "supabase";
@@ -17,6 +19,8 @@ export interface ServerEnv {
   devSessionSecret: string | null;
   /** Audits one user may start per rolling 24 hours. */
   dailyAuditLimit: number;
+  /** Per action: hits per fixed window, per IP and per user. */
+  rateLimits: RateLimits;
 }
 
 type Raw = Record<string, string | undefined>;
@@ -39,7 +43,12 @@ export function parseServerEnv(raw: Raw): ServerEnv {
   };
 
   // A production build (next start, the OpenNext worker) never assumes development: SITE_ENV must be set.
-  if (raw.NODE_ENV === "production" && !raw.SITE_ENV?.trim()) {
+  // Only `next dev` and tests may default it; any other server (including a NODE_ENV-less worker, see
+  // serverEnv) must set it. `next build` also runs with NODE_ENV=production while prerendering; it is not a server.
+  // (Callers that pass no NODE_ENV at all are unit tests of this parser.)
+  const building = raw.NEXT_PHASE === "phase-production-build";
+  const hosted = raw.NODE_ENV !== undefined && raw.NODE_ENV !== "development" && raw.NODE_ENV !== "test";
+  if (hosted && !building && !raw.SITE_ENV?.trim()) {
     errors.push("SITE_ENV is required in a production build (development, preview or production); it has no default there");
   }
   const siteEnv = pick(raw, "SITE_ENV", ["development", "preview", "production"] as const, "development", errors);
@@ -82,6 +91,26 @@ export function parseServerEnv(raw: Raw): ServerEnv {
   const dailyAuditLimit = Number(raw.LF_DAILY_AUDIT_LIMIT?.trim() || "10");
   if (!Number.isSafeInteger(dailyAuditLimit) || dailyAuditLimit < 1) errors.push("LF_DAILY_AUDIT_LIMIT must be a positive integer");
 
+  const rateLimits = { ...DEFAULT_RATE_LIMITS };
+  const rateLimitVars: Record<RateLimitedAction, [string, string | undefined]> = {
+    upload: ["LF_RATE_LIMIT_UPLOAD", raw.LF_RATE_LIMIT_UPLOAD],
+    signin: ["LF_RATE_LIMIT_SIGNIN", raw.LF_RATE_LIMIT_SIGNIN],
+    checkout: ["LF_RATE_LIMIT_CHECKOUT", raw.LF_RATE_LIMIT_CHECKOUT],
+  };
+  for (const action of Object.keys(DEFAULT_RATE_LIMITS) as RateLimitedAction[]) {
+    const [name, rawValue] = rateLimitVars[action];
+    const value = rawValue?.trim();
+    if (!value) continue;
+    const match = /^(\d+)\/(\d+)$/.exec(value);
+    const [limit, windowSeconds] = match ? [Number(match[1]), Number(match[2])] : [0, 0];
+    if (limit < 1 || windowSeconds < 1) {
+      const d = DEFAULT_RATE_LIMITS[action];
+      errors.push(`${name} must look like ${d.limit}/${d.windowSeconds} (hits per window / window seconds)`);
+    } else {
+      rateLimits[action] = { limit, windowSeconds };
+    }
+  }
+
   if (errors.length > 0) throw new Error(`Invalid server configuration:\n- ${errors.join("\n- ")}`);
   return {
     siteEnv,
@@ -94,6 +123,7 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     gemini,
     devSessionSecret: siteEnv === "development" ? raw.DEV_SESSION_SECRET?.trim() || "local-dev-only-not-a-secret" : null,
     dailyAuditLimit,
+    rateLimits,
   };
 }
 
@@ -115,6 +145,7 @@ export function serverEnvError(): string | null {
 }
 
 export function serverEnv(): ServerEnv {
-  cached ??= parseServerEnv(process.env);
+  // Under workerd process.env may carry no NODE_ENV at runtime: treat that as hosted, never as development.
+  cached ??= parseServerEnv({ ...process.env, NODE_ENV: process.env.NODE_ENV || "production" });
   return cached;
 }
