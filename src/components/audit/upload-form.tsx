@@ -16,6 +16,7 @@ interface Labels {
   run: string;
   running: string;
   missing: string;
+  errorSize: string;
   tenantLabel: string;
   landlordLabel: string;
   addressLabel: string;
@@ -48,12 +49,39 @@ function FileField({ name, tag, title, hint, choose, ready, onPick }: { name: st
   );
 }
 
-export function UploadForm({ locale, labels, jurisdictions }: { locale: string; labels: Labels; jurisdictions: { key: string; label: string }[] }) {
+export function UploadForm({
+  locale,
+  labels,
+  jurisdictions,
+  maxFileBytes,
+}: {
+  locale: string;
+  labels: Labels;
+  jurisdictions: { key: string; label: string }[];
+  maxFileBytes: number;
+}) {
   const [files, setFiles] = useState<{ ledger: string | null; lease: string | null }>({ ledger: null, lease: null });
   const [busy, setBusy] = useState(false);
+  const [tooLarge, setTooLarge] = useState(false);
   const ready = files.ledger !== null && files.lease !== null;
   return (
-    <form action="/api/audits" method="post" encType="multipart/form-data" className="space-y-6" onSubmit={() => setBusy(true)}>
+    <form
+      action={`/api/audits?locale=${locale}`}
+      method="post"
+      encType="multipart/form-data"
+      className="space-y-6"
+      onSubmit={(e) => {
+        // The server enforces the same limit; this just saves uploading a file it will refuse.
+        const picked = ["ledger", "lease"].map((n) => (e.currentTarget.elements.namedItem(n) as HTMLInputElement | null)?.files?.[0]);
+        if (picked.some((f) => f !== undefined && f.size > maxFileBytes)) {
+          e.preventDefault();
+          setTooLarge(true);
+          return;
+        }
+        setTooLarge(false);
+        setBusy(true);
+      }}
+    >
       <input type="hidden" name="locale" value={locale} />
       <fieldset>
         <legend className="text-sm font-bold">{labels.jurisdiction}</legend>
@@ -86,6 +114,11 @@ export function UploadForm({ locale, labels, jurisdictions }: { locale: string; 
         ))}
       </div>
       {!ready ? <p className="text-sm text-muted">{labels.missing}</p> : null}
+      {tooLarge ? (
+        <p role="alert" className="text-sm font-semibold text-alert" data-testid="upload-too-large">
+          {labels.errorSize}
+        </p>
+      ) : null}
       <button type="submit" className="btn btn-gold w-full sm:w-auto" disabled={busy} data-testid="run-scan">
         {busy ? labels.running : labels.run}
       </button>

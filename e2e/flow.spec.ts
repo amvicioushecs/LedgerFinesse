@@ -124,3 +124,13 @@ test("unauthenticated webhook calls are rejected", async ({ request }) => {
   const res = await request.post("/api/stripe/webhook", { data: "{}", headers: { "stripe-signature": "t=1,v1=bad" } });
   expect(res.status()).toBe(400);
 });
+
+test("uploads are refused before the body is read when signed out", async ({ request, baseURL }) => {
+  const res = await request.post("/api/audits?locale=es", {
+    multipart: { jurisdiction: "san-diego-ca", lease: { name: "x.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(1024) } },
+    headers: { origin: baseURL! },
+    maxRedirects: 0,
+  });
+  expect(res.status()).toBe(303);
+  expect(res.headers()["location"]).toContain("/es/signin?next=/es/audits/new");
+});

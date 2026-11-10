@@ -1,51 +1,34 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { attachDocument, createAudit, scanAudit } from "@/lib/audits/service";
-import { isJurisdictionKey } from "@/lib/jurisdictions";
+import { readUploadRequest } from "@/lib/audits/upload-request";
 import { isLocale, type Locale } from "@/lib/i18n/locales";
+import { LOCALE_COOKIE } from "@/lib/i18n/routing";
 import { auditDeps, getCurrentUser, isSameOrigin } from "@/lib/server/runtime";
-import { validateUpload } from "@/lib/uploads";
-
-const text = (form: FormData, name: string) => {
-  const value = form.get(name);
-  return typeof value === "string" ? value : null;
-};
 
 /** Upload lease + ledger, run the free scan, then show the result page. */
 export async function POST(request: NextRequest) {
   if (!isSameOrigin(request)) return new NextResponse("Forbidden", { status: 403 });
-  const form = await request.formData();
-  const localeValue = text(form, "locale") ?? "en";
-  const locale: Locale = isLocale(localeValue) ? localeValue : "en";
-  const back = (error: string) => NextResponse.redirect(new URL(`/${locale}/audits/new?error=${error}`, request.url), 303);
+  // Locale comes from the URL or cookie so nothing reads the body before the user is known.
+  const hinted = request.nextUrl.searchParams.get("locale") ?? request.cookies.get(LOCALE_COOKIE)?.value ?? "en";
+  const locale: Locale = isLocale(hinted) ? hinted : "en";
 
   const user = await getCurrentUser();
   if (!user) return NextResponse.redirect(new URL(`/${locale}/signin?next=/${locale}/audits/new`, request.url), 303);
 
-  const jurisdiction = text(form, "jurisdiction") ?? "";
-  if (!isJurisdictionKey(jurisdiction)) return back("generic");
-
-  const files: { kind: "ledger" | "lease"; bytes: Uint8Array; declaredType: string }[] = [];
-  for (const kind of ["ledger", "lease"] as const) {
-    const file = form.get(kind);
-    if (!(file instanceof File) || file.size === 0) return back("missing");
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const check = validateUpload({ bytes, declaredType: file.type });
-    if (!check.ok) return back(check.reason === "too_large" ? "size" : check.reason === "empty" ? "missing" : "type");
-    files.push({ kind, bytes, declaredType: file.type });
+  const parsed = await readUploadRequest(request);
+  if (!parsed.ok) {
+    // Over the request cap: refuse outright (the body was never read). Otherwise back to the form.
+    if (!parsed.bodyRead) return new NextResponse(parsed.status === 413 ? "Upload too large" : "Length required", { status: parsed.status });
+    return NextResponse.redirect(new URL(`/${locale}/audits/new?error=${parsed.error}`, request.url), 303);
   }
+  const { form } = parsed;
 
   const deps = await auditDeps();
-  const audit = await createAudit(deps, user.id, {
-    locale,
-    jurisdiction,
-    tenantName: text(form, "tenantName"),
-    landlordName: text(form, "landlordName"),
-    propertyAddress: text(form, "propertyAddress"),
-  });
-  for (const file of files) {
+  const audit = await createAudit(deps, user.id, form);
+  for (const file of form.files) {
     const attached = await attachDocument(deps, user.id, audit.id, file);
-    if (!attached.ok) return back("generic");
+    if (!attached.ok) return NextResponse.redirect(new URL(`/${form.locale}/audits/new?error=generic`, request.url), 303);
   }
   await scanAudit(deps, user.id, audit.id);
-  return NextResponse.redirect(new URL(`/${locale}/audits/${audit.id}`, request.url), 303);
+  return NextResponse.redirect(new URL(`/${form.locale}/audits/${audit.id}`, request.url), 303);
 }
