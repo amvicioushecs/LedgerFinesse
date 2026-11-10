@@ -60,6 +60,42 @@ export const SAMPLE_CASE = {
     openingBalanceCents: 0,
     ledger: buildLedger(),
   } satisfies Extraction,
+  /** Side-by-side lease text vs. what the ledger billed (sample only). ES flagged for Copy Desk. */
+  leaseClauses: [
+    {
+      section: { en: "Section 4: Base Rent & Grace Period", es: "Sección 4: Renta base y periodo de gracia" },
+      leaseText: {
+        en: "Base Monthly Rent is $2,450.00, due on the 1st of each month with a five (5) calendar day grace period through the 5th.",
+        es: "La renta mensual base es de $2,450.00, pagadera el día 1 de cada mes, con un periodo de gracia de cinco (5) días naturales hasta el día 5.",
+      },
+      ledgerReality: {
+        en: "Ledger charged a $150.00 late fee on June 4th, the same day the ACH payment posted, inside the grace period.",
+        es: "El estado de cuenta cobró un cargo por atraso de $150.00 el 4 de junio, el mismo día en que se registró el pago ACH, dentro del periodo de gracia.",
+      },
+    },
+    {
+      section: { en: "Section 6: Late Charge Limitation", es: "Sección 6: Límite del cargo por atraso" },
+      leaseText: {
+        en: "If rent is received after the 5th of the month, a maximum late fee of $75.00 may be assessed.",
+        es: "Si la renta se recibe después del día 5 del mes, se puede cobrar un cargo por atraso máximo de $75.00.",
+      },
+      ledgerReality: {
+        en: "Ledger assessed $150.00, double the $75.00 lease limit.",
+        es: "El estado de cuenta cobró $150.00, el doble del límite de $75.00 del contrato.",
+      },
+    },
+    {
+      section: { en: "Section 11: Utilities & Sub-Metering", es: "Sección 11: Servicios y submedición" },
+      leaseText: {
+        en: "Tenant shall pay actual sub-metered water/sewer usage. No monthly billing administrative fee, portal fee, or valet trash markup is authorized.",
+        es: "El inquilino pagará el consumo real submedido de agua/drenaje. No se autoriza ningún cargo administrativo mensual de facturación, cargo de portal ni recargo de recolección de basura (valet trash).",
+      },
+      ledgerReality: {
+        en: "Ledger billed a $15.00/mo RUBS admin fee for 10 months ($150.00), a $25.00/mo valet trash fee for 3 months ($75.00) and a $40.00 amenity/pest fee twice ($80.00).",
+        es: "El estado de cuenta cobró un cargo administrativo RUBS de $15.00/mes durante 10 meses ($150.00), un cargo de valet trash de $25.00/mes durante 3 meses ($75.00) y un cargo de amenidades/plagas de $40.00 dos veces ($80.00).",
+      },
+    },
+  ],
   leaseRefs: {
     late_fee_timing: "Lease § 4",
     late_fee_amount: "Lease § 6",

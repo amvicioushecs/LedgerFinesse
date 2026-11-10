@@ -80,7 +80,7 @@ export async function attachDocument(
   return { ok: true };
 }
 
-function toStoredFindings(report: Report): StoredFinding[] {
+export function toStoredFindings(report: Report): StoredFinding[] {
   return report.items.map((item, position) => ({
     position,
     category: item.category,
