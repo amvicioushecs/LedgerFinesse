@@ -231,6 +231,9 @@ describe("payment under review (refund policy)", () => {
     expect(await repo.applyCheckoutPaid({ eventId: "evt_2", eventType: "checkout.session.completed", checkoutSessionId: "cs_unknown", auditId: audit.id,
       amountCents: 9600, currency: "usd", paymentIntentId: "pi_2" })).toBe("unknown_session");
     expect(await flags()).toEqual({ paymentUnderReview: true, refundPending: false });
+    // A person closes the unknown-session review (no refund): the audit is no longer "under review".
+    repo.reviews.find((r) => r.eventId === "evt_2")!.resolvedAt = "2026-11-10T09:00:00Z";
+    expect(await flags()).toEqual({ paymentUnderReview: false, refundPending: false });
   });
 });
 

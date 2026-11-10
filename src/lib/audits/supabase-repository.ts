@@ -325,7 +325,7 @@ export class SupabaseAuditRepository implements AuditRepository {
       .select("id", { count: "exact", head: true })
       .eq("audit_id", auditId)
       .eq("reason", "unknown_session")
-      .is("refund_id", null);
+      .is("resolved_at", null);
     if (error) throw new Error(`has unknown session review: ${error.message}`);
     return (count ?? 0) > 0;
   }
@@ -336,7 +336,7 @@ export class SupabaseAuditRepository implements AuditRepository {
       .select("id", { count: "exact", head: true })
       .eq("audit_id", auditId)
       .in("reason", [...REFUNDABLE_REASONS])
-      .is("refund_id", null);
+      .is("resolved_at", null);
     if (error) throw new Error(`has pending refund: ${error.message}`);
     return (count ?? 0) > 0;
   }

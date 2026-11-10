@@ -6,7 +6,7 @@ import { SupabaseAuditRepository } from "@/lib/audits/supabase-repository";
 function recordingClient(count: number) {
   const calls: unknown[][] = [];
   const builder: Record<string, unknown> = {};
-  for (const m of ["from", "select", "eq", "is", "not"]) builder[m] = (...args: unknown[]) => (calls.push([m, ...args]), builder);
+  for (const m of ["from", "select", "eq", "is", "not", "in"]) builder[m] = (...args: unknown[]) => (calls.push([m, ...args]), builder);
   builder.then = (resolve: (v: unknown) => unknown) => resolve({ count, error: null });
   return { client: builder as unknown as SupabaseClient, calls };
 }
@@ -19,4 +19,16 @@ describe("SupabaseAuditRepository.hasOpenReview", () => {
     expect(admin.calls).toContainEqual(["is", "resolved_at", null]);
     expect(admin.calls).not.toContainEqual(["is", "refund_id", null]);
   });
+});
+
+describe("SupabaseAuditRepository: unknown-session review and pending refund are open until resolved_at is set", () => {
+  for (const method of ["hasUnknownSessionReview", "hasPendingRefund"] as const) {
+    it(`${method} filters on resolved_at is null`, async () => {
+      const admin = recordingClient(0);
+      const repo = new SupabaseAuditRepository(recordingClient(0).client, admin.client);
+      await repo[method]("audit-1");
+      expect(admin.calls).toContainEqual(["is", "resolved_at", null]);
+      expect(admin.calls).not.toContainEqual(["is", "refund_id", null]);
+    });
+  }
 });
