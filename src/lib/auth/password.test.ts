@@ -257,3 +257,15 @@ describe("SupabasePasswordProvider", () => {
     expect(a.calls[0]).toEqual({ method: "resetPasswordForEmail", args: ["a@x.co", { redirectTo: "https://app.test/auth/callback?next=%2Fen%2Freset-password" }] });
   });
 });
+
+describe("passwordSignIn: leaked-password check on sign-up", () => {
+  it("refuses a password found in breach data before creating the account; sign-in is not checked", async () => {
+    const { provider, calls } = fakeProvider();
+    const leakedPassword = async (p: string) => p === "correct horse";
+    expect(await passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP, leakedPassword }, { ...base, intent: "signup", next: null }))
+      .toEqual({ kind: "back", status: "leaked", next: "/en/audits/new" });
+    expect(calls).toEqual([]);
+    await passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP, leakedPassword }, { ...base, intent: "signin", next: null });
+    expect(calls.map((c) => c.method)).toEqual(["signIn"]);
+  });
+});

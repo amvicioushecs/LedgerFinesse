@@ -100,6 +100,12 @@ describe("Copy Desk final strings (PR #2)", () => {
       ["signup.password.locked", en.signup.password.locked, "Too many wrong passwords. Password sign-in is paused for this email for 15 minutes. You can still sign in with an email link or reset your password."],
       ["signup.password.confirmBody", en.signup.password.confirmBody, "This reset link is for {email}. Continue only if that's your account."],
       ["signup.password.confirmCancelled", en.signup.password.confirmCancelled, "No changes were made, and your password is the same. If you didn't ask for a reset, you can ignore that email."],
+      ["signup.password.codeTitle", en.signup.password.codeTitle, "Enter the 6-digit code we emailed to {email}."],  // Neon draft, pending Copy Desk
+      ["signup.password.codeLabel", en.signup.password.codeLabel, "Code"],  // Neon draft, pending Copy Desk
+      ["signup.password.codeSubmit", en.signup.password.codeSubmit, "Continue"],  // Neon draft, pending Copy Desk
+      ["signup.password.codeInvalid", en.signup.password.codeInvalid, "That code isn't right. Check the latest email and try again."],  // Neon draft, pending Copy Desk
+      ["signup.password.leaked", en.signup.password.leaked, "That password has appeared in a data breach. Choose a different one."],  // Neon draft, pending Copy Desk
+      ["signup.password.passwordReset", en.signup.password.passwordReset, "Your password was changed. Sign in with your new password."],  // Neon draft, pending Copy Desk
       ["result.reviewBody", en.result.reviewBody, "Something about this payment didn't match your audit, so a person is reviewing it. You won't be charged again."],
       ["result.refundPendingTitle", en.result.refundPendingTitle, "Your refund is being processed"],
       ["result.refundPendingBody", en.result.refundPendingBody, "We're refunding this payment to your original payment method. If a try doesn't go through, we retry it. Once it's done, you can pay the correct fee to unlock your report."],
@@ -165,6 +171,12 @@ describe("Copy Desk final strings (PR #2)", () => {
       ["signup.password.locked", es.signup.password.locked, "Demasiadas contraseñas incorrectas. El inicio de sesión con contraseña está en pausa para este correo durante 15 minutos. Aún puedes entrar con un enlace por correo o restablecer tu contraseña."],
       ["signup.password.confirmBody", es.signup.password.confirmBody, "Este enlace es para restablecer la contraseña de {email}. Continúa solo si esa es tu cuenta."],
       ["signup.password.confirmCancelled", es.signup.password.confirmCancelled, "No se hizo ningún cambio y tu contraseña sigue igual. Si no pediste restablecerla, puedes ignorar ese correo."],
+      ["signup.password.codeTitle", es.signup.password.codeTitle, "Escribe el código de 6 dígitos que enviamos a {email}."],  // Neon draft, pending Copy Desk
+      ["signup.password.codeLabel", es.signup.password.codeLabel, "Código"],  // Neon draft, pending Copy Desk
+      ["signup.password.codeSubmit", es.signup.password.codeSubmit, "Continuar"],  // Neon draft, pending Copy Desk
+      ["signup.password.codeInvalid", es.signup.password.codeInvalid, "Ese código no es correcto. Revisa el correo más reciente e inténtalo de nuevo."],  // Neon draft, pending Copy Desk
+      ["signup.password.leaked", es.signup.password.leaked, "Esa contraseña apareció en una filtración de datos. Elige otra."],  // Neon draft, pending Copy Desk
+      ["signup.password.passwordReset", es.signup.password.passwordReset, "Tu contraseña se cambió. Inicia sesión con tu nueva contraseña."],  // Neon draft, pending Copy Desk
       ["audits.status.unlocked", es.audits.status.unlocked, "Desbloqueado"],
       ["result.reviewBody", es.result.reviewBody, "Algo de este pago no coincidió con tu auditoría, así que una persona lo está revisando. No se te cobrará de nuevo."],
       ["result.refundPendingTitle", es.result.refundPendingTitle, "Tu reembolso está en proceso"],

@@ -29,6 +29,23 @@ With no env set, the app runs fully local (development only). It uses an in-memo
 - RLS tests run on PGlite with a Supabase stub (`src/lib/db/rls.test.ts`), with no Supabase connection.
 - Auth: email magic link and email + password (Confirm email ON). Add `{APP_URL}/auth/callback` to the allowed redirect URLs. Keep the default email templates (`{{ .ConfirmationURL }}`): magic link and sign-up confirmation must arrive as a PKCE `code`; `/auth/callback` refuses a `token_hash` for them (login CSRF). A recovery template may link `{APP_URL}/auth/callback?token_hash={{ .TokenHash }}&type=recovery&locale=en` for cross-device resets; that session is held until the person confirms "Continue as <email>".
 
+## Neon (LF_BACKEND=neon, draft)
+
+Lakebase Postgres plus Neon Auth (Managed Better Auth), as an alternative to the Supabase backend.
+
+- Schema: `neon/migrations/`, applied with `node scripts/neon-migrate.mjs` (needs `DATABASE_URL` and
+  `NEON_BRANCH`; refuses `production` without `--production`). Every table and function is revoked from the Data
+  API roles (`anonymous`, `authenticated`); only the app server (owner role) reads or writes.
+- Auth runs server-side only: keep `NEON_AUTH_BASE_URL` out of `NEXT_PUBLIC_*` and don't mount an `/api/auth`
+  proxy, or the app's rate limits (including 5 wrong passwords per email per 15 min) can be bypassed.
+- Shared SMTP sends codes, not links: sign-in, email verification and password reset use a 6-digit code that only
+  completes in the browser that asked for it (signed `lf_code_pending` cookie).
+- Branch settings used: `require_email_verification` on, `revoke_sessions_on_password_reset` on, magic links off,
+  no OAuth providers. Production needs custom SMTP and the app origin added as a trusted domain.
+- Uploads: no storage backend yet. Files stay in memory for the upload request (the scan runs in the same request).
+- Tests: `LF_NEON_TEST=1 npx vitest run src/lib/audits/neon-repository.integration.test.ts` and
+  `npm run test:e2e:neon`, both against a `dev-*` branch only (env from `neon env pull --file <outside the repo>`).
+
 ## Stripe (test mode)
 - Use a `sk_test_`/`rk_test_` key. A Stripe sandbox is recommended.
 - Webhook endpoint: `{APP_URL}/api/stripe/webhook`. Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`.
