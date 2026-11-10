@@ -11,19 +11,19 @@ async function AccountLinks({ locale }: { locale: Locale }) {
   const user = await getCurrentUser();
   if (!user) {
     return (
-      <Link href={`/${locale}/signin`} className="hidden text-sm font-semibold text-ink underline-offset-4 hover:underline sm:inline">
+      <Link href={`/${locale}/signin`} className="tap-target hidden text-sm font-semibold text-ink underline-offset-4 hover:underline sm:inline-flex">
         {t.nav.signIn}
       </Link>
     );
   }
   return (
     <>
-      <Link href={`/${locale}/audits`} className="text-sm font-semibold text-ink underline-offset-4 hover:underline">
+      <Link href={`/${locale}/audits`} className="tap-target text-sm font-semibold text-ink underline-offset-4 hover:underline">
         {t.nav.myAudits}
       </Link>
       <form action="/auth/signout" method="post" className="hidden sm:block">
         <input type="hidden" name="locale" value={locale} />
-        <button className="text-sm text-muted underline-offset-4 hover:underline">{t.nav.signOut}</button>
+        <button className="tap-target text-sm text-muted underline-offset-4 hover:underline">{t.nav.signOut}</button>
       </form>
     </>
   );
@@ -37,7 +37,7 @@ export function SiteHeader({ locale }: { locale: Locale }) {
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <Logo href={`/${locale}`} />
         <div className="flex items-center gap-3 sm:gap-4">
-          <Link href={`/${locale}/blog`} className="hidden text-sm font-semibold text-ink underline-offset-4 hover:underline md:inline">
+          <Link href={`/${locale}/blog`} className="tap-target hidden text-sm font-semibold text-ink underline-offset-4 hover:underline md:inline-flex">
             {t.nav.blog}
           </Link>
           <Suspense fallback={null}>

@@ -10,7 +10,7 @@ import { JsonLd } from "@/components/json-ld";
 import { alternateOf, getPost, listPosts } from "@/lib/blog";
 import { alternatesFor, isLocale, type Locale } from "@/lib/i18n/locales";
 import { currentLocale } from "@/lib/i18n/server";
-import { siteUrl } from "@/lib/seo";
+import { openGraphFor, siteUrl } from "@/lib/seo";
 import { breadcrumbLd, organizationLd } from "@/lib/structured-data";
 
 export async function generateStaticParams() {
@@ -36,7 +36,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: post.title,
     description: post.description,
     alternates: { canonical: self, languages },
-    openGraph: { type: "article", title: post.title, description: post.description, url: self, publishedTime: post.date, locale },
+    openGraph: openGraphFor(locale, `/blog/${post.slug}`, { type: "article", title: post.title, description: post.description, publishedTime: post.date }),
     robots: post.draft ? { index: false, follow: true } : undefined,
   };
 }
@@ -79,7 +79,7 @@ export default async function BlogPostPage({ params }: Props) {
         </p>
       ) : null}
       <nav aria-label="Breadcrumb" className="text-sm text-muted">
-        <Link href={`/${locale}/blog`} className="hover:underline">{t.blog.back}</Link>
+        <Link href={`/${locale}/blog`} className="tap-target hover:underline">{t.blog.back}</Link>
       </nav>
       <h1 className="font-display mt-4 text-4xl leading-tight font-bold sm:text-5xl">{post.title}</h1>
       <p className="mt-3 text-sm text-muted">

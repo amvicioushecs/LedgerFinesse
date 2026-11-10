@@ -5,13 +5,13 @@ import { Disclaimer } from "@/components/disclaimer";
 import { HeroCard } from "@/components/hero-card";
 import { JsonLd } from "@/components/json-ld";
 import { currentLocale } from "@/lib/i18n/server";
-import { localeAlternates } from "@/lib/seo";
+import { localeAlternates, openGraphFor } from "@/lib/seo";
 import { faqLd, organizationLd, websiteLd } from "@/lib/structured-data";
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await currentLocale();
   const t = getDictionary(locale);
-  return { title: { absolute: t.meta.title }, description: t.meta.description, alternates: localeAlternates(locale, "/") };
+  return { title: { absolute: t.meta.title }, description: t.meta.description, alternates: localeAlternates(locale, "/"), openGraph: openGraphFor(locale, "/") };
 }
 
 export default async function LandingPage() {

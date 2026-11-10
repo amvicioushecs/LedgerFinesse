@@ -4,13 +4,13 @@ import { getDictionary } from "@/content/dictionaries";
 import { JsonLd } from "@/components/json-ld";
 import { listPosts } from "@/lib/blog";
 import { currentLocale } from "@/lib/i18n/server";
-import { localeAlternates } from "@/lib/seo";
+import { localeAlternates, openGraphFor } from "@/lib/seo";
 import { breadcrumbLd } from "@/lib/structured-data";
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await currentLocale();
   const t = getDictionary(locale);
-  return { title: t.blog.title, description: t.blog.lead, alternates: localeAlternates(locale, "/blog") };
+  return { title: t.blog.title, description: t.blog.lead, alternates: localeAlternates(locale, "/blog"), openGraph: openGraphFor(locale, "/blog") };
 }
 
 export default async function BlogIndex() {
@@ -27,13 +27,13 @@ export default async function BlogIndex() {
           <li key={post.slug} className="rounded-lg border border-line p-6">
             {post.draft ? <p className="pill mb-2 bg-butter text-alert">{t.blog.draft}</p> : null}
             <h2 className="font-display text-2xl font-bold">
-              <Link href={`/${locale}/blog/${post.slug}`} className="hover:underline">{post.title}</Link>
+              <Link href={`/${locale}/blog/${post.slug}`} className="tap-target hover:underline">{post.title}</Link>
             </h2>
             <p className="mt-2 text-sm text-muted">{post.description}</p>
             <p className="mt-3 text-xs text-muted">
               {t.blog.published} <time dateTime={post.date}>{post.date}</time>
             </p>
-            <Link href={`/${locale}/blog/${post.slug}`} className="mt-3 inline-block text-sm font-semibold underline">
+            <Link href={`/${locale}/blog/${post.slug}`} className="tap-target mt-3 text-sm font-semibold underline">
               {t.blog.readMore} →
             </Link>
           </li>

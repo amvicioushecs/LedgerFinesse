@@ -10,7 +10,7 @@
   --color-mint: #dce9e1;
   --color-butter: #fff0c8;
   --color-alert: #a63d2f;
-  --color-muted: #5d6d66;
+  --color-muted: #52625b;
   --color-sage: #9cad9f;
   --color-line: #cbd5ce;
   --color-cream: #fbfaf6;
@@ -79,6 +79,21 @@ body {
 .btn:disabled {
   opacity: 0.6;
   pointer-events: none;
+}
+
+.tap-target {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding-inline: 12px;
+}
+.tap-target:focus-visible {
+  outline: 2px solid var(--color-forest);
+  outline-offset: 2px;
+}
+header .tap-target {
+  margin-block: -12px;
 }
 
 .pill {
