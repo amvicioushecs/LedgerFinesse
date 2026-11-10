@@ -16,7 +16,7 @@ With no env set, the app runs fully local (development only). It uses an in-memo
 
 | Variable | Values | Notes |
 |---|---|---|
-| `SITE_ENV` | `development` \| `preview` \| `production` | The memory store and mock Stripe are development-only. Production also refuses demo extraction. Anything but production refuses live Stripe keys. Non-production pages are `noindex` and robots disallows all. |
+| `SITE_ENV` | `development` \| `preview` \| `production` | Required in any production build (`next start`, the worker): with it missing, every page answers 503 and API routes refuse to run. Only `next dev` and tests default to `development`. The memory store and mock Stripe are development-only. Production also refuses demo extraction. Anything but production refuses live Stripe keys. Non-production pages are `noindex` and robots disallows all. |
 | `LF_BACKEND` | `memory` \| `supabase` | `supabase` needs `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` |
 | `STRIPE_MODE` | `mock` \| `stripe` | `stripe` needs `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` |
 | `EXTRACTION_MODE` | `demo` \| `gemini` | `gemini` needs `GEMINI_API_KEY`; `GEMINI_MODEL` is optional |

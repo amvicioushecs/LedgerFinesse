@@ -1,6 +1,7 @@
 /**
- * Server configuration. Defaults run everything locally (memory store, mock Stripe, demo extraction);
- * production refuses those shortcuts, and non-production refuses live Stripe keys.
+ * Server configuration. In `next dev` and tests the defaults run everything locally (memory store, mock Stripe,
+ * demo extraction). A production build requires SITE_ENV; production refuses those shortcuts, and
+ * non-production refuses live Stripe keys.
  */
 
 export interface ServerEnv {
@@ -37,6 +38,10 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     return value ?? "";
   };
 
+  // A production build (next start, the OpenNext worker) never assumes development: SITE_ENV must be set.
+  if (raw.NODE_ENV === "production" && !raw.SITE_ENV?.trim()) {
+    errors.push("SITE_ENV is required in a production build (development, preview or production); it has no default there");
+  }
   const siteEnv = pick(raw, "SITE_ENV", ["development", "preview", "production"] as const, "development", errors);
   const backend = pick(raw, "LF_BACKEND", ["memory", "supabase"] as const, "memory", errors);
   const stripeMode = pick(raw, "STRIPE_MODE", ["mock", "stripe"] as const, "mock", errors);
@@ -98,6 +103,16 @@ export function stripeWebhookEnabled(env: Pick<ServerEnv, "stripeMode" | "siteEn
 }
 
 let cached: ServerEnv | null = null;
+
+/** The configuration problem, or null. The proxy answers 503 for every page while this is set. */
+export function serverEnvError(): string | null {
+  try {
+    serverEnv();
+    return null;
+  } catch (error) {
+    return String(error instanceof Error ? error.message : error);
+  }
+}
 
 export function serverEnv(): ServerEnv {
   cached ??= parseServerEnv(process.env);

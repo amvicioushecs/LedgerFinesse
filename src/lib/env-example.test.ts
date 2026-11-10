@@ -10,7 +10,9 @@ describe(".env.example", () => {
   it("lists every variable env.ts reads, with no values", () => {
     const listed = [...example.matchAll(/^([A-Z0-9_]+)=(.*)$/gm)];
     expect(listed.filter(([, , value]) => value !== "")).toEqual([]);
-    const read = [...new Set([...source.matchAll(/(?:raw\.|need\("|pick\(raw, ")([A-Z][A-Z0-9_]+)/g)].map((m) => m[1]))];
+    const read = [...new Set([...source.matchAll(/(?:raw\.|need\("|pick\(raw, ")([A-Z][A-Z0-9_]+)/g)].map((m) => m[1]))]
+      // Set by Next/the runtime, not by whoever deploys.
+      .filter((name) => name !== "NODE_ENV");
     expect(read.length).toBeGreaterThan(10);
     expect(listed.map(([, name]) => name)).toEqual(expect.arrayContaining(read));
   });

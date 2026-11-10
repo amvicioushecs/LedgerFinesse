@@ -14,6 +14,15 @@ describe("parseServerEnv", () => {
     expect(env).toMatchObject({ siteEnv: "development", backend: "memory", stripeMode: "mock", extractionMode: "demo", appUrl: "http://localhost:3000" });
   });
 
+  it("never falls back to development in a production build: SITE_ENV is required (N2)", () => {
+    expect(() => parseServerEnv({ NODE_ENV: "production" })).toThrow(/SITE_ENV is required/);
+    // The reported hole: Supabase configured, nothing else set -> mock Stripe with a public webhook secret.
+    expect(() => parseServerEnv({ NODE_ENV: "production", LF_BACKEND: "supabase", ...supabase })).toThrow(/SITE_ENV is required/);
+    expect(() => parseServerEnv({ NODE_ENV: "production", SITE_ENV: "  " })).toThrow(/SITE_ENV is required/);
+    expect(parseServerEnv({ NODE_ENV: "production", SITE_ENV: "development" }).siteEnv).toBe("development");
+    expect(parseServerEnv({ NODE_ENV: "development" }).siteEnv).toBe("development");
+  });
+
   it("parses a real Supabase + Stripe test configuration", () => {
     const env = parseServerEnv({ SITE_ENV: "preview", LF_BACKEND: "supabase", STRIPE_MODE: "stripe", NEXT_PUBLIC_APP_URL: "https://preview.example.com/", ...supabase, ...stripe });
     expect(env).toMatchObject({ backend: "supabase", stripeMode: "stripe", appUrl: "https://preview.example.com", stripe: { secretKey: "sk_test_123", webhookSecret: "whsec_123" } });
