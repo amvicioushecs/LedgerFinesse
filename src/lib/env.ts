@@ -65,7 +65,7 @@ export function parseServerEnv(raw: Raw): ServerEnv {
   }
 
   const gemini =
-    extractionMode === "gemini" ? { apiKey: need("GEMINI_API_KEY"), model: raw.GEMINI_MODEL?.trim() || "gemini-2.5-flash" } : null;
+    extractionMode === "gemini" ? { apiKey: need("GEMINI_API_KEY"), model: raw.GEMINI_MODEL?.trim() || "gemini-3.8-flash" } : null;
 
   if (errors.length > 0) throw new Error(`Invalid server configuration:\n- ${errors.join("\n- ")}`);
   return {
