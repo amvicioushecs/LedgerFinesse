@@ -16,6 +16,7 @@ import { DEV_SESSION_COOKIE, signDevSession, verifyDevSession } from "@/lib/auth
 import { MemoryPasswordProvider } from "@/lib/auth/memory-password";
 import { NeonPasswordProvider, startCodeSignIn, type NeonAuthApi, type PendingStore } from "@/lib/auth/neon-auth";
 import { neonAuth, neonAuthApi } from "@/lib/auth/neon-auth-server";
+import { readNeonSession } from "@/lib/auth/neon-session";
 import { PENDING_CODE_COOKIE, PENDING_CODE_MAX_AGE, readPendingCode, signPendingCode, type PendingCode } from "@/lib/auth/pending-code";
 import { isLeakedPassword } from "@/lib/auth/pwned";
 import { mayChangePassword, type AuthMethod, type PasswordAuthProvider } from "@/lib/auth/password";
@@ -197,10 +198,9 @@ export function codeDeps() {
   };
 }
 
-/** Neon Auth session, checked by Neon Auth (the SDK's signed cache lasts at most 60 s). Verified emails only. */
+/** Neon Auth session, checked with Neon Auth on every call; read-only, so it is safe in Server Component renders. */
 async function neonSession(env: ServerEnv) {
-  const { data } = await neonAuth(neonConfig(env)).getSession();
-  return data?.user && data.user.emailVerified ? data : null;
+  return readNeonSession((await cookies()).getAll(), { authBaseUrl: neonConfig(env).authBaseUrl, appUrl: env.appUrl });
 }
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {
@@ -211,7 +211,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   }
   if (env.backend === "neon") {
     const session = await neonSession(env);
-    return session ? { id: session.user.id, email: session.user.email ?? null } : null;
+    return session ? { id: session.userId, email: session.email } : null;
   }
   const supabase = await supabaseForRequest(env);
   const { data } = await supabase.auth.getUser();
@@ -232,7 +232,7 @@ export async function passwordChangeAllowed(): Promise<boolean> {
   } else if (env.backend === "neon") {
     // Time only: when Neon Auth created this session (there is no recovery session; resets use an emailed code).
     const session = await neonSession(env);
-    methods = session ? [{ method: "session", at: Math.floor(new Date(session.session.createdAt).getTime() / 1000) }] : [];
+    methods = session ? [{ method: "session", at: session.createdAtSeconds }] : [];
   } else {
     const { data, error } = await (await supabaseForRequest(env)).auth.getClaims();
     const amr = error ? [] : ((data?.claims.amr ?? []) as unknown[]);

@@ -5,8 +5,9 @@ import { fromSdkError, type NeonAuthApi, type NeonAuthResult, type OtpType } fro
 /**
  * Server-side Neon Auth client (Managed Better Auth). The SDK forwards this request's Neon Auth cookies and Origin
  * and writes the session cookies it gets back (httpOnly, Secure, SameSite=Lax, set by Neon Auth). Sessions are
- * rows in neon_auth.session, so sign-out and password resets revoke them; the SDK's signed session-data cache is
- * kept short (60 s) so a revoked session stops working within a minute.
+ * rows in neon_auth.session, so sign-out and password resets revoke them. Used only from Route Handlers (it may set
+ * cookies); pages read the session with readNeonSession (neon-session.ts), which never writes cookies and skips
+ * the SDK's session-data cache, so a revoked session stops working at once.
  */
 const SESSION_DATA_TTL_SECONDS = 60;
 

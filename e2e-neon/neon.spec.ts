@@ -144,3 +144,45 @@ test("password reset uses an emailed code in the same browser", async ({ page })
   await page.goto("/en/reset-password");
   await expect(page).toHaveURL(/\/en\/signin\?status=expired/);
 });
+
+/** Signs an lf_code_pending payload the way pending-code.ts does, so the test can make well-signed bad cookies. */
+async function signedPending(payload: object): Promise<string> {
+  const b64 = (b: Uint8Array) => Buffer.from(b).toString("base64url");
+  const body = b64(new TextEncoder().encode(JSON.stringify(payload)));
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(`lf-pending-code:${process.env.NEON_AUTH_COOKIE_SECRET}`), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return `${body}.${b64(new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body))))}`;
+}
+
+test("a pending code that is malformed, expired or has no expiry sends the reset page to status=expired (no cookie writes in the render)", async ({ page }) => {
+  const now = Math.floor(Date.now() / 1000);
+  for (const value of ["garbage", await signedPending({ p: "reset", e: "a@example.com", x: now - 1 }), await signedPending({ p: "reset", e: "a@example.com" })]) {
+    await page.context().clearCookies();
+    await page.context().addCookies([{ name: "lf_code_pending", value, domain: "localhost", path: "/" }]);
+    const response = await page.goto("/en/reset-password");
+    expect(response?.status()).toBeLessThan(500);
+    await expect(page).toHaveURL(/\/en\/signin\?status=expired/);
+  }
+  // Control: the same signature with a live expiry shows the form.
+  await page.context().clearCookies();
+  await page.context().addCookies([{ name: "lf_code_pending", value: await signedPending({ p: "reset", e: "a@example.com", x: now + 300 }), domain: "localhost", path: "/" }]);
+  await page.goto("/en/reset-password");
+  await expect(page.getByTestId("reset-code-form")).toContainText("a@example.com");
+});
+
+test("a session revoked in Neon Auth stops at once and the page render doesn't try to clear cookies", async ({ page }) => {
+  const email = fresh("revoked");
+  await signUpVerified(page, email);
+  await passwordSignIn(page, email);
+  await page.waitForURL(/\/en\/audits\/new/);
+  await expect(page.getByTestId("file-ledger")).toBeAttached();
+  // Revoke server-side (as an admin or a password reset would) and also keep the SDK's session-data cache cookie:
+  // the page must ask Neon Auth, not trust the cache.
+  await sql.query(`delete from neon_auth.session where "userId" = (select id from neon_auth."user" where email = $1)`, [email]);
+  const response = await page.goto("/en/audits/new");
+  expect(response?.status()).toBeLessThan(500);
+  await expect(page).toHaveURL(/\/en\/signin/);
+  // Neon Auth asked for its cookies to be cleared; a page render can't do that, so they are left to expire.
+  expect((await page.context().cookies()).some((c) => c.name === "__Secure-neon-auth.session_token")).toBe(true);
+  await page.goto("/en/audits");
+  await expect(page).toHaveURL(/\/en\/signin/);
+});
