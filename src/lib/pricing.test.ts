@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeUnlockFeeCents, netRecoveryCents, requiresCheckout, UNLOCK_FEE_BASIS_POINTS } from "@/lib/pricing";
+import { unlockDecision, computeUnlockFeeCents, netRecoveryCents, requiresCheckout, UNLOCK_FEE_BASIS_POINTS } from "@/lib/pricing";
 
 describe("computeUnlockFeeCents", () => {
   it("is one flat 15%", () => {
@@ -46,5 +46,21 @@ describe("netRecoveryCents", () => {
   it("is the owed total minus the fee", () => {
     expect(netRecoveryCents(64000)).toBe(54400);
     expect(netRecoveryCents(0)).toBe(0);
+  });
+});
+
+describe("unlockDecision", () => {
+  it("is clean with nothing owed: no checkout, nothing to unlock", () => {
+    expect(unlockDecision(0)).toEqual({ kind: "clean", feeCents: 0 });
+  });
+
+  it("waives fees below Stripe's 50-cent minimum charge instead of raising the price", () => {
+    expect(unlockDecision(3)).toEqual({ kind: "waived", feeCents: 0 });
+    expect(unlockDecision(329)).toEqual({ kind: "waived", feeCents: 0 });
+  });
+
+  it("charges exactly 15% once the fee reaches 50 cents", () => {
+    expect(unlockDecision(330)).toEqual({ kind: "checkout", feeCents: 50 });
+    expect(unlockDecision(64000)).toEqual({ kind: "checkout", feeCents: 9600 });
   });
 });

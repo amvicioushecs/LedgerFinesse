@@ -38,3 +38,22 @@ export function requiresCheckout(feeCents: number): boolean {
 export function netRecoveryCents(totalOwedCents: number): number {
   return totalOwedCents - computeUnlockFeeCents(totalOwedCents);
 }
+
+/** Stripe's smallest USD charge. */
+export const STRIPE_MINIMUM_CHARGE_CENTS = 50;
+
+export type UnlockDecision =
+  | { kind: "clean"; feeCents: 0 }
+  | { kind: "waived"; feeCents: 0 }
+  | { kind: "checkout"; feeCents: number };
+
+/**
+ * What unlocking an audit costs. Nothing owed: clean, no checkout. A 15% fee under Stripe's minimum
+ * charge is waived (report unlocks free) rather than rounded up, so the price never exceeds 15%.
+ */
+export function unlockDecision(totalOwedCents: number): UnlockDecision {
+  if (assertCents(totalOwedCents, "totalOwedCents") === 0) return { kind: "clean", feeCents: 0 };
+  const feeCents = computeUnlockFeeCents(totalOwedCents);
+  if (feeCents < STRIPE_MINIMUM_CHARGE_CENTS) return { kind: "waived", feeCents: 0 };
+  return { kind: "checkout", feeCents };
+}
