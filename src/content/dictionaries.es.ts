@@ -11,7 +11,7 @@ export const es: Dictionary = {
   nav: { startScan: "Escaneo gratis", blog: "Blog", sample: "Auditoría de ejemplo", signIn: "Iniciar sesión", signOut: "Cerrar sesión", myAudits: "Mis auditorías", language: "Idioma", switchTo: "English" },
   disclaimer:
     "LedgerFinesse no es un despacho de abogados; ofrece análisis contable automatizado con OCR y plantillas de cartas de disputa, no representación legal formal.",
-  footer: { tagline: "Escaneo OCR gratis · 15% solo cuando te deben dinero · © 2026 LedgerFinesse", privacy: "Privacidad", terms: "Términos" },
+  footer: { tagline: "Escaneo OCR gratis · 15% solo cuando te deben dinero · © 2026 LedgerFinesse" },
   hero: {
     eyebrow: "Es hora de exigir cuentas",
     title: "Descubre si tu arrendador te cobró de más.",

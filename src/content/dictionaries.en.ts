@@ -9,7 +9,7 @@ export const en = {
   nav: { startScan: "Start Free Scan", blog: "Blog", sample: "Sample audit", signIn: "Sign in", signOut: "Sign out", myAudits: "My audits", language: "Language", switchTo: "Español" },
   disclaimer:
     "LedgerFinesse is not a law firm and provides automated OCR accounting analysis and dispute letter templates, not formal legal representation.",
-  footer: { tagline: "Free OCR Scan · 15% Only When Money Is Owed · © 2026 LedgerFinesse", privacy: "Privacy", terms: "Terms" },
+  footer: { tagline: "Free OCR Scan · 15% Only When Money Is Owed · © 2026 LedgerFinesse" },
   hero: {
     eyebrow: "It's Time To Hold Them Accountable",
     title: "Find out if your landlord overcharged you.",
