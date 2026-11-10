@@ -186,3 +186,52 @@ test("a session revoked in Neon Auth stops at once and the page render doesn't t
   await page.goto("/en/audits");
   await expect(page).toHaveURL(/\/en\/signin/);
 });
+
+test("Stripe TEST: sign up, sign in with a password, scan, pay on Stripe Checkout and unlock through the webhook", async ({ page }) => {
+  test.skip(process.env.STRIPE_E2E !== "1", "run with scripts/e2e-neon-stripe.sh");
+  test.setTimeout(150_000);
+  const email = fresh("stripe");
+  await signUpVerified(page, email);
+  await passwordSignIn(page, email);
+  await page.waitForURL(/\/en\/audits\/new/);
+  await page.getByTestId("file-ledger").setInputFiles("e2e/fixtures/ledger.png");
+  await page.getByTestId("file-lease").setInputFiles("e2e/fixtures/lease.pdf");
+  await page.locator('input[name="landlordName"]').fill("Pacific Crest Residential Management LLC");
+  await page.getByTestId("run-scan").click();
+  await page.waitForURL(/\/en\/audits\/[0-9a-f-]{36}$/);
+  await expect(page.getByTestId("free-total")).toHaveText("$640.00");
+  const auditUrl = page.url();
+  const auditId = auditUrl.split("/").pop()!;
+
+  await page.getByTestId("pay").click();
+  await page.waitForURL(/checkout\.stripe\.com/, { timeout: 30_000 });
+  // 15% of $640.00.
+  await expect(page.getByText("$96.00").first()).toBeVisible({ timeout: 30_000 });
+  // Dynamic payment methods: the card row's accordion button is an invisible overlay, so dispatch the click.
+  const cardNumber = page.locator("#cardNumber");
+  if (!(await cardNumber.isVisible().catch(() => false))) await page.getByTestId("card-accordion-item-button").dispatchEvent("click");
+  await cardNumber.fill("4242 4242 4242 4242", { timeout: 20_000 });
+  await page.locator("#cardExpiry").fill("12 / 34");
+  await page.locator("#cardCvc").fill("123");
+  await page.locator("#billingName").fill("E2E Renter");
+  const zip = page.locator("#billingPostalCode");
+  if (await zip.isVisible().catch(() => false)) await zip.fill("92101");
+  // "Save my information with Link" is pre-checked and would ask for a phone number.
+  const link = page.locator("#enableStripePass");
+  if (await link.isChecked().catch(() => false)) await link.uncheck({ force: true });
+  await page.getByTestId("hosted-payment-submit-button").click();
+  await page.waitForURL((url) => url.href.startsWith(auditUrl), { timeout: 60_000 });
+
+  // The unlock comes only from the signed webhook (forwarded by stripe listen).
+  await expect(async () => {
+    await page.reload();
+    await expect(page.getByTestId("report-total")).toHaveText("$640.00", { timeout: 2_000 });
+  }).toPass({ timeout: 60_000 });
+  await expect(page.getByTestId("breakdown").locator("> li")).toHaveCount(5);
+  const rows = (await sql.query(
+    `select p.status, p.amount_cents::int as amount_cents, p.stripe_payment_intent_id is not null as has_pi, a.unlocked_at is not null as unlocked
+     from public.payments p join public.audits a on a.id = p.audit_id where p.audit_id = $1`, [auditId],
+  )) as { status: string; amount_cents: number; has_pi: boolean; unlocked: boolean }[];
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({ status: "paid", amount_cents: 9600, has_pi: true, unlocked: true });
+});
