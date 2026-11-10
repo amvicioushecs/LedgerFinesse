@@ -9,6 +9,7 @@ import { ReportView } from "@/components/report/report-view";
 import { getFreeResult, getUnlockedReport } from "@/lib/audits/service";
 import type { Locale } from "@/lib/i18n/locales";
 import { currentLocale } from "@/lib/i18n/server";
+import { isUuid } from "@/lib/ids";
 import { formatUsd } from "@/lib/money";
 import { auditDeps, getCurrentUser } from "@/lib/server/runtime";
 import { PRIVATE_ROBOTS } from "@/lib/seo";
@@ -29,7 +30,7 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
   const query = await searchParams;
   const user = await getCurrentUser();
   if (!user) redirect(`/${locale}/signin?next=${encodeURIComponent(`/${locale}/audits/${id}`)}`);
-  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
+  if (!isUuid(id)) notFound();
 
   const t = getDictionary(locale);
   const r = t.result;

@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
 import type { AuditRepository, CheckoutPaidOutcome } from "@/lib/audits/types";
+import { isUuid } from "@/lib/ids";
 import type { RefundGateway } from "@/lib/payments/types";
 
 export type WebhookOutcome =
@@ -52,7 +53,8 @@ export async function handleStripeWebhook(
   if (!event.type.startsWith("checkout.session.")) return { status: 200, outcome: "ignored" };
   const session = event.data.object as Stripe.Checkout.Session;
   const auditId = session.metadata?.audit_id;
-  if (!auditId) return { status: 200, outcome: "ignored" };
+  // Not ours (or malformed): a uuid cast error would 500 and make Stripe retry for days.
+  if (!auditId || !isUuid(auditId)) return { status: 200, outcome: "ignored" };
 
   try {
     switch (event.type) {

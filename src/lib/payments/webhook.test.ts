@@ -5,11 +5,13 @@ import type { AuditRecord } from "@/lib/audits/types";
 import { handleStripeWebhook } from "@/lib/payments/webhook";
 import type { RefundGateway } from "@/lib/payments/types";
 
+const AUDIT_1 = "20000000-0000-4000-8000-000000000001";
+const AUDIT_2 = "20000000-0000-4000-8000-000000000002";
 const SECRET = "whsec_test_unit";
 const stripe = new Stripe("sk_test_unit_not_real");
 
 const audit: AuditRecord = {
-  id: "audit-1", userId: "user-a", status: "preview_ready", locale: "en", jurisdiction: "san-diego-ca",
+  id: AUDIT_1, userId: "user-a", status: "preview_ready", locale: "en", jurisdiction: "san-diego-ca",
   tenantName: null, landlordName: null, propertyAddress: null,
   totalOwedCents: 64000, itemCount: 5, linesScanned: 37, feeCents: 9600, unlockedAt: null, createdAt: "2026-11-09T00:00:00Z",
 };
@@ -18,7 +20,7 @@ function event(type: string, session: Record<string, unknown>, id = "evt_1") {
   return JSON.stringify({
     id, object: "event", type, api_version: "2026-10-28.endive", created: 1, livemode: false,
     data: { object: { id: "cs_test_1", object: "checkout.session", amount_total: 9600, currency: "usd", payment_status: "paid",
-      payment_intent: "pi_1", metadata: { audit_id: "audit-1", user_id: "user-a" }, ...session } },
+      payment_intent: "pi_1", metadata: { audit_id: AUDIT_1, user_id: "user-a" }, ...session } },
   });
 }
 
@@ -40,10 +42,10 @@ beforeEach(async () => {
   };
   repo = new MemoryAuditRepository();
   await repo.insertAudit({ ...audit });
-  await repo.insertPayment({ auditId: "audit-1", userId: "user-a", checkoutSessionId: "cs_test_1", amountCents: 9600, status: "pending" });
+  await repo.insertPayment({ auditId: AUDIT_1, userId: "user-a", checkoutSessionId: "cs_test_1", amountCents: 9600, status: "pending" });
 });
 
-const status = async () => (await repo.findAudit("user-a", "audit-1"))?.status;
+const status = async () => (await repo.findAudit("user-a", AUDIT_1))?.status;
 
 describe("handleStripeWebhook", () => {
   it("unlocks on a signed, paid checkout.session.completed with the matching amount", async () => {
@@ -88,7 +90,7 @@ describe("handleStripeWebhook", () => {
 
   it("refunds a second paid session for an audit that is already unlocked, once per event", async () => {
     await run(signed(event("checkout.session.completed", {})));
-    await repo.insertPayment({ auditId: "audit-1", userId: "user-a", checkoutSessionId: "cs_test_2", amountCents: 9600, status: "pending" });
+    await repo.insertPayment({ auditId: AUDIT_1, userId: "user-a", checkoutSessionId: "cs_test_2", amountCents: 9600, status: "pending" });
     const second = signed(event("checkout.session.completed", { id: "cs_test_2", payment_intent: "pi_2" }, "evt_2"));
     expect(await run(second)).toEqual({ status: 200, outcome: "refunded" });
     expect(refunds.calls).toEqual([{ paymentIntentId: "pi_2", idempotencyKey: "refund-evt_2" }]);
@@ -100,7 +102,7 @@ describe("handleStripeWebhook", () => {
 
   it("retries a failed duplicate-charge refund when Stripe redelivers the event", async () => {
     await run(signed(event("checkout.session.completed", {})));
-    await repo.insertPayment({ auditId: "audit-1", userId: "user-a", checkoutSessionId: "cs_test_2", amountCents: 9600, status: "pending" });
+    await repo.insertPayment({ auditId: AUDIT_1, userId: "user-a", checkoutSessionId: "cs_test_2", amountCents: 9600, status: "pending" });
     const second = signed(event("checkout.session.completed", { id: "cs_test_2", payment_intent: "pi_2" }, "evt_2"));
     refunds.fail = true;
     expect(await run(second)).toEqual({ status: 500, outcome: "error" });
@@ -110,9 +112,9 @@ describe("handleStripeWebhook", () => {
   });
 
   it("records and flags a payment for an audit that cannot be unlocked or a session we never created", async () => {
-    await repo.insertAudit({ ...audit, id: "audit-2", status: "failed" });
-    await repo.insertPayment({ auditId: "audit-2", userId: "user-a", checkoutSessionId: "cs_test_3", amountCents: 9600, status: "pending" });
-    expect(await run(signed(event("checkout.session.completed", { id: "cs_test_3", metadata: { audit_id: "audit-2" } }, "evt_3")))).toEqual({ status: 200, outcome: "not_unlockable" });
+    await repo.insertAudit({ ...audit, id: AUDIT_2, status: "failed" });
+    await repo.insertPayment({ auditId: AUDIT_2, userId: "user-a", checkoutSessionId: "cs_test_3", amountCents: 9600, status: "pending" });
+    expect(await run(signed(event("checkout.session.completed", { id: "cs_test_3", metadata: { audit_id: AUDIT_2 } }, "evt_3")))).toEqual({ status: 200, outcome: "not_unlockable" });
     expect(repo.paymentStatus("cs_test_3")).toBe("paid");
     expect(await run(signed(event("checkout.session.completed", { id: "cs_test_unknown" }, "evt_4")))).toEqual({ status: 200, outcome: "unknown_session" });
     expect(repo.reviews.map((r) => [r.eventId, r.reason])).toEqual([["evt_3", "not_unlockable"], ["evt_4", "unknown_session"]]);
@@ -125,6 +127,11 @@ describe("handleStripeWebhook", () => {
     expect(await run(req)).toEqual({ status: 200, outcome: "duplicate" });
   });
 
+  it("ignores an audit_id that is not a UUID instead of failing (and retrying) forever", async () => {
+    repo.applyCheckoutPaid = async () => { throw new Error("invalid input syntax for type uuid"); };
+    expect(await run(signed(event("checkout.session.completed", { metadata: { audit_id: "not-a-uuid" } }, "evt_u")))).toEqual({ status: 200, outcome: "ignored" });
+  });
+
   it("ignores events without our metadata and unrelated types", async () => {
     expect(await run(signed(event("checkout.session.completed", { metadata: {} })))).toEqual({ status: 200, outcome: "ignored" });
     expect(await run(signed(event("customer.created", {}, "evt_2")))).toEqual({ status: 200, outcome: "ignored" });
@@ -132,7 +139,7 @@ describe("handleStripeWebhook", () => {
 
   it("marks failed and expired sessions", async () => {
     expect(await run(signed(event("checkout.session.expired", { payment_status: "unpaid" }, "evt_3")))).toEqual({ status: 200, outcome: "expired" });
-    expect(await repo.findPendingPayment("audit-1")).toBeNull();
+    expect(await repo.findPendingPayment(AUDIT_1)).toBeNull();
   });
 
   it("returns 500 so Stripe retries when storage fails", async () => {

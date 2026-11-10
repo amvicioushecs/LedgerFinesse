@@ -134,3 +134,9 @@ test("uploads are refused before the body is read when signed out", async ({ req
   expect(res.status()).toBe(303);
   expect(res.headers()["location"]).toContain("/es/signin?next=/es/audits/new");
 });
+
+test("malformed audit ids are 404s, not server errors", async ({ request, baseURL }) => {
+  expect((await request.get("/api/audits/not-a-uuid/status")).status()).toBe(404);
+  const res = await request.post("/api/checkout", { form: { auditId: "x'; drop", locale: "en" }, headers: { origin: baseURL! }, maxRedirects: 0 });
+  expect(res.status()).toBe(404);
+});
