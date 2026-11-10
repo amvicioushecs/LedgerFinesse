@@ -195,12 +195,21 @@ async function failStaleScans(deps: AuditDeps, userId: string) {
   await deps.repo.failStaleScans(userId, new Date(deps.now().getTime() - STALE_SCAN_MS).toISOString());
 }
 
-export async function getAuditStatus(deps: AuditDeps, userId: string, auditId: string): Promise<AuditRecord["status"] | null> {
+/** Reads one audit; only a processing audit triggers the stale-scan sweep (a write), then is re-read. */
+async function findFresh(deps: AuditDeps, userId: string, auditId: string): Promise<AuditRecord | null> {
+  const audit = await deps.repo.findAudit(userId, auditId);
+  if (audit?.status !== "processing") return audit;
   await failStaleScans(deps, userId);
-  return (await deps.repo.findAudit(userId, auditId))?.status ?? null;
+  return deps.repo.findAudit(userId, auditId);
+}
+
+export async function getAuditStatus(deps: AuditDeps, userId: string, auditId: string): Promise<AuditRecord["status"] | null> {
+  return (await findFresh(deps, userId, auditId))?.status ?? null;
 }
 
 export async function listAudits(deps: AuditDeps, userId: string): Promise<AuditRecord[]> {
+  const audits = await deps.repo.listAudits(userId);
+  if (!audits.some((a) => a.status === "processing")) return audits;
   await failStaleScans(deps, userId);
   return deps.repo.listAudits(userId);
 }
@@ -220,8 +229,7 @@ export interface FreeResult {
 
 /** What anyone signed in as the owner may see before paying: status, count, total, fee. */
 export async function getFreeResult(deps: AuditDeps, userId: string, auditId: string): Promise<FreeResult | null> {
-  await failStaleScans(deps, userId);
-  const audit = await deps.repo.findAudit(userId, auditId);
+  const audit = await findFresh(deps, userId, auditId);
   if (!audit) return null;
   if (audit.totalOwedCents === null || audit.itemCount === null) return { audit, summary: null, decision: null, paymentUnderReview: false };
   return {

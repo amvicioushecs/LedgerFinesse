@@ -215,3 +215,28 @@ describe("payment under review (refund policy)", () => {
     expect(await review()).toBe(true);
   });
 });
+
+describe("stale-scan sweep writes only when something is processing (N8)", () => {
+  it("does not touch the database on status polls, lists or result reads for audits that are not processing", async () => {
+    const repo = deps.repo as MemoryAuditRepository;
+    let sweeps = 0;
+    const sweep = repo.failStaleScans.bind(repo);
+    repo.failStaleScans = async (...args) => (sweeps++, sweep(...args));
+    const audit = await readyAudit();
+    await scanAudit(deps, USER, audit.id);
+    for (let i = 0; i < 5; i++) await getAuditStatus(deps, USER, audit.id);
+    await listAudits(deps, USER);
+    await getFreeResult(deps, USER, audit.id);
+    expect(sweeps).toBe(0);
+  });
+
+  it("still fails a scan stuck in processing past the timeout", async () => {
+    const repo = deps.repo as MemoryAuditRepository;
+    const audit = await readyAudit();
+    await repo.claimForScan(USER, audit.id, new Date(deps.now().getTime() - STALE_SCAN_MS - 1).toISOString());
+    expect(await getAuditStatus(deps, USER, audit.id)).toBe("failed");
+    const other = await readyAudit();
+    await repo.claimForScan(USER, other.id, new Date(deps.now().getTime() - STALE_SCAN_MS - 1).toISOString());
+    expect((await listAudits(deps, USER)).find((a) => a.id === other.id)?.status).toBe("failed");
+  });
+});
