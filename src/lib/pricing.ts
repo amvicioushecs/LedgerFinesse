@@ -1,32 +1,23 @@
 import { assertCents, percentOfCents } from "@/lib/money";
 
-/** Unlock fee: one flat 15% of the verified amount owed. */
+/** Unlock fee: 15% of the verified amount owed... */
 export const UNLOCK_FEE_BASIS_POINTS = 1500;
-
-export interface UnlockFeeOptions {
-  /**
-   * OPEN DECISION: whether tiny findings carry a minimum unlock fee.
-   * Default 0 = no minimum. Do not set a value in production code until the
-   * product owner decides.
-   */
-  minimumFeeCents?: number;
-}
+/** ...but never less than 50 cents (Stripe's smallest USD charge). Decided by Hector, 2026-11-10. */
+export const MINIMUM_FEE_CENTS = 50;
 
 /**
- * Fee in cents to unlock a report. Always computed on the server from the stored audit.
+ * Fee in cents to unlock a report, always computed on the server from the stored audit:
+ * - $0 owed -> no charge (clean).
+ * - 1-49 cents owed -> no charge: the report unlocks free and the audit is flagged (free_unlock_below_minimum).
+ * - Otherwise max(15% of the total rounded half up to the cent, 50 cents).
+ * Mirrored in SQL by the audits_fee_matches_policy check.
  *
- * - $0 owed -> $0 fee (no charge, no checkout).
- * - Otherwise 15% of `totalOwedCents`, rounded half up to the cent.
- * - With a minimum set, the fee is never below it (still $0 when nothing is owed).
- * - Very small totals can round to a $0 fee; callers treat that as a free unlock.
- *
- * @example computeUnlockFeeCents(64000) -> 9600 ("$640 owed, so you pay $96")
+ * @example computeUnlockFeeCents(64000) -> 9600; computeUnlockFeeCents(300) -> 50; computeUnlockFeeCents(49) -> 0
  */
-export function computeUnlockFeeCents(totalOwedCents: number, options: UnlockFeeOptions = {}): number {
+export function computeUnlockFeeCents(totalOwedCents: number): number {
   assertCents(totalOwedCents, "totalOwedCents");
-  const minimumFeeCents = assertCents(options.minimumFeeCents ?? 0, "minimumFeeCents");
-  if (totalOwedCents === 0) return 0;
-  return Math.max(percentOfCents(totalOwedCents, UNLOCK_FEE_BASIS_POINTS), minimumFeeCents);
+  if (totalOwedCents < MINIMUM_FEE_CENTS) return 0;
+  return Math.max(percentOfCents(totalOwedCents, UNLOCK_FEE_BASIS_POINTS), MINIMUM_FEE_CENTS);
 }
 
 /** A checkout is only ever created for a positive fee. */
@@ -39,21 +30,23 @@ export function netRecoveryCents(totalOwedCents: number): number {
   return totalOwedCents - computeUnlockFeeCents(totalOwedCents);
 }
 
-/** Stripe's smallest USD charge. */
-export const STRIPE_MINIMUM_CHARGE_CENTS = 50;
-
 export type UnlockDecision =
   | { kind: "clean"; feeCents: 0 }
-  | { kind: "waived"; feeCents: 0 }
-  | { kind: "checkout"; feeCents: number };
+  | { kind: "free_below_minimum"; feeCents: 0 }
+  | { kind: "checkout"; feeCents: number; minimumApplied: boolean };
 
-/**
- * What unlocking an audit costs. Nothing owed: clean, no checkout. A 15% fee under Stripe's minimum
- * charge is waived (report unlocks free) rather than rounded up, so the price never exceeds 15%.
- */
+/** What unlocking an audit costs: nothing owed (clean), under 50 cents owed (free, flagged), or a checkout. */
 export function unlockDecision(totalOwedCents: number): UnlockDecision {
   if (assertCents(totalOwedCents, "totalOwedCents") === 0) return { kind: "clean", feeCents: 0 };
   const feeCents = computeUnlockFeeCents(totalOwedCents);
-  if (feeCents < STRIPE_MINIMUM_CHARGE_CENTS) return { kind: "waived", feeCents: 0 };
-  return { kind: "checkout", feeCents };
+  if (feeCents === 0) return { kind: "free_below_minimum", feeCents: 0 };
+  return { kind: "checkout", feeCents, minimumApplied: percentOfCents(totalOwedCents, UNLOCK_FEE_BASIS_POINTS) < MINIMUM_FEE_CENTS };
+}
+
+export type FeeKind = "none" | "free_below_minimum" | "minimum" | "percent";
+
+/** Which fee the renter was (or will be) charged, for display. */
+export function feeKind(totalOwedCents: number, feeCents: number): FeeKind {
+  if (feeCents === 0) return totalOwedCents > 0 ? "free_below_minimum" : "none";
+  return percentOfCents(totalOwedCents, UNLOCK_FEE_BASIS_POINTS) < MINIMUM_FEE_CENTS ? "minimum" : "percent";
 }

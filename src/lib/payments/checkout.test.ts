@@ -52,12 +52,24 @@ describe("startCheckout", () => {
     const result = await startCheckout(deps(), { userId: "user-a", email: "a@x.test" }, "audit-1", "es");
     expect(result).toEqual({ kind: "redirect", url: "https://checkout.stripe.test/1" });
     expect(gateway.created[0]).toMatchObject({
-      auditId: "audit-1", userId: "user-a", amountCents: 9600, totalOwedCents: 64000, locale: "es", customerEmail: "a@x.test",
+      auditId: "audit-1", userId: "user-a", amountCents: 9600, totalOwedCents: 64000, minimumFeeApplied: false, locale: "es", customerEmail: "a@x.test",
       idempotencyKey: "lf-checkout-audit-1-0",
       successUrl: "https://app.test/es/audits/audit-1?checkout=success",
       cancelUrl: "https://app.test/es/audits/audit-1?checkout=cancel",
     });
     expect(await repo.findPendingPayment("audit-1")).toMatchObject({ checkoutSessionId: "cs_test_1", amountCents: 9600 });
+  });
+
+  it("charges the 50-cent minimum when 15% is less, and tells the gateway so", async () => {
+    await repo.insertAudit(audit({ totalOwedCents: 300, feeCents: 50, itemCount: 1 }));
+    await startCheckout(deps(), { userId: "user-a", email: null }, "audit-1", "en");
+    expect(gateway.created[0]).toMatchObject({ amountCents: 50, totalOwedCents: 300, minimumFeeApplied: true });
+  });
+
+  it("never opens checkout for a free unlock under 50 cents owed", async () => {
+    await repo.insertAudit(audit({ status: "unlocked", totalOwedCents: 49, feeCents: 0, unlockedAt: "2026-11-09T00:00:00Z" }));
+    expect(await startCheckout(deps(), { userId: "user-a", email: null }, "audit-1", "en")).toEqual({ kind: "no_checkout", reason: "unlocked" });
+    expect(gateway.created).toHaveLength(0);
   });
 
   it("reuses the open session instead of creating a second one", async () => {

@@ -81,6 +81,19 @@ describe("handleStripeWebhook", () => {
     expect(refunds.calls).toHaveLength(0);
   });
 
+  it("checks the amount against the stored minimum fee: 15% of $3.00 (45 cents) is a mismatch, 50 cents unlocks", async () => {
+    repo = new MemoryAuditRepository();
+    await repo.insertAudit({ ...audit, totalOwedCents: 300, feeCents: 50 });
+    await repo.insertPayment({ auditId: AUDIT_1, userId: "user-a", checkoutSessionId: "cs_test_1", amountCents: 50, status: "pending" });
+    expect(await run(signed(event("checkout.session.completed", { amount_total: 45 })))).toEqual({ status: 200, outcome: "amount_mismatch" });
+    expect(await status()).toBe("preview_ready");
+
+    repo = new MemoryAuditRepository();
+    await repo.insertAudit({ ...audit, totalOwedCents: 300, feeCents: 50 });
+    await repo.insertPayment({ auditId: AUDIT_1, userId: "user-a", checkoutSessionId: "cs_test_1", amountCents: 50, status: "pending" });
+    expect(await run(signed(event("checkout.session.completed", { amount_total: 50 }, "evt_min")))).toEqual({ status: 200, outcome: "unlocked" });
+  });
+
   it("treats a later event for the session that unlocked the audit as already unlocked (no flag, no refund)", async () => {
     await run(signed(event("checkout.session.completed", {})));
     expect(await run(signed(event("checkout.session.async_payment_succeeded", {}, "evt_9")))).toEqual({ status: 200, outcome: "already_unlocked" });

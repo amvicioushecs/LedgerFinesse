@@ -46,7 +46,8 @@ create table public.audits (
   total_owed_cents   bigint check (total_owed_cents >= 0),
   item_count         integer check (item_count >= 0),
   lines_scanned      integer check (lines_scanned >= 0),
-  -- Flat 15% of the verified total, rounded half up, fixed when the scan finishes. 0 = clean or waived.
+  -- max(15% of the verified total rounded half up, 50 cents), fixed when the scan finishes.
+  -- 0 = clean ($0 owed) or a free unlock (1-49 cents owed). Mirrors src/lib/pricing.ts.
   fee_cents          bigint check (fee_cents >= 0),
   engine_version     text,
   unlocked_at        timestamptz,
@@ -54,10 +55,13 @@ create table public.audits (
   scan_started_at    timestamptz,
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now(),
-  constraint audits_fee_is_15_percent check (
+  -- Unlocked with no charge because under 50 cents was owed: kept on the record so these can be found.
+  free_unlock_below_minimum boolean generated always as (
+    coalesce(status = 'unlocked' and fee_cents = 0 and total_owed_cents > 0, false)
+  ) stored,
+  constraint audits_fee_matches_policy check (
     fee_cents is null or total_owed_cents is null
-    or fee_cents = (total_owed_cents * 15 + 50) / 100
-    or (fee_cents = 0 and (total_owed_cents * 15 + 50) / 100 < 50)
+    or fee_cents = case when total_owed_cents < 50 then 0 else greatest((total_owed_cents * 15 + 50) / 100, 50) end
   ),
   constraint audits_clean_is_zero check (status <> 'clean' or total_owed_cents = 0),
   constraint audits_scanned_has_summary check (
@@ -67,6 +71,7 @@ create table public.audits (
   constraint audits_unlocked_has_time check (status <> 'unlocked' or unlocked_at is not null),
   constraint audits_processing_has_start check (status <> 'processing' or scan_started_at is not null)
 );
+create index audits_free_unlock_below_minimum_idx on public.audits (created_at) where free_unlock_below_minimum;
 create trigger audits_updated_at before update on public.audits
   for each row execute function public.set_updated_at();
 create index audits_user_created_idx on public.audits (user_id, created_at desc);
@@ -259,19 +264,20 @@ grant execute on function public.record_refund(text, text) to service_role;
 
 -- ---------------------------------------------------------------- save scan (service role only)
 -- Stores the engine output in one transaction. Only a 'processing' audit can be completed, and only as
--- preview_ready (a fee to pay), clean, or unlocked with a waived $0 fee. Paid unlocks go through apply_checkout_paid.
+-- preview_ready (a fee to pay), clean, or unlocked free when 1-49 cents is owed. Paid unlocks go through apply_checkout_paid.
 create or replace function public.save_scan_result(p_audit_id uuid, p_result jsonb)
 returns void language plpgsql security definer set search_path = '' as $$
 declare
   v_user   uuid;
   v_status text := p_result ->> 'status';
   v_fee    bigint := (p_result ->> 'feeCents')::bigint;
+  v_total  bigint := (p_result ->> 'totalOwedCents')::bigint;
 begin
   select user_id into v_user from public.audits where id = p_audit_id and status = 'processing' for update;
   if v_user is null then raise exception 'audit % is not processing', p_audit_id; end if;
   if v_status is null
      or v_status not in ('preview_ready', 'clean', 'unlocked')
-     or (v_status = 'unlocked' and v_fee is distinct from 0)
+     or (v_status = 'unlocked' and (v_fee is distinct from 0 or v_total is null or v_total < 1 or v_total >= 50))
      or (v_status = 'preview_ready' and (v_fee is null or v_fee < 50)) then
     raise exception 'scan may not finish as % with fee %', coalesce(v_status, 'null'), coalesce(v_fee::text, 'null');
   end if;

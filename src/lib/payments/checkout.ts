@@ -33,7 +33,7 @@ export async function startCheckout(
 
   const decision = unlockDecision(audit.totalOwedCents);
   if (decision.kind !== "checkout" || decision.feeCents !== audit.feeCents) {
-    throw new Error(`stored fee for audit ${auditId} does not match 15% of its total`);
+    throw new Error(`stored fee for audit ${auditId} does not match the fee policy for its total`);
   }
 
   // Paid but not unlocked means a payment is under review; a second checkout would charge twice.
@@ -58,6 +58,7 @@ export async function startCheckout(
     userId: user.userId,
     amountCents: decision.feeCents,
     totalOwedCents: audit.totalOwedCents,
+    minimumFeeApplied: decision.minimumApplied,
     locale,
     customerEmail: user.email,
     successUrl: `${back}?checkout=success`,

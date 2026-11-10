@@ -66,7 +66,7 @@ describe.skipIf(!enabled)("Stripe test API (real gateway)", () => {
 
     // Same idempotency key (same audit, same attempt number) -> Stripe replays the same session.
     const retry = await gateway.createSession({
-      auditId, userId, amountCents: EXPECTED_FEE_CENTS, totalOwedCents: TOTAL_OWED_CENTS, locale: "en",
+      auditId, userId, amountCents: EXPECTED_FEE_CENTS, totalOwedCents: TOTAL_OWED_CENTS, minimumFeeApplied: false, locale: "en",
       customerEmail: "integration@example.com",
       successUrl: `${appUrl}/en/audits/${auditId}?checkout=success`, cancelUrl: `${appUrl}/en/audits/${auditId}?checkout=cancel`,
       idempotencyKey: `lf-checkout-${auditId}-0`,

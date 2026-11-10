@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { MemoryAuditRepository, MemoryDocumentStore } from "@/lib/audits/memory-repository";
-import { attachDocument, canStartAudit, createAudit, getAuditStatus, getFreeResult, getUnlockedReport, listAudits, scanAudit, STALE_SCAN_MS, type AuditDeps } from "@/lib/audits/service";
+import { attachDocument, canStartAudit, createAudit, getAuditStatus, getFreeResult, getUnlockedReport, isFreeUnlockBelowMinimum, listAudits, scanAudit, STALE_SCAN_MS, type AuditDeps } from "@/lib/audits/service";
 import { demoExtractor } from "@/lib/extraction/demo";
 import type { Extractor } from "@/lib/audits/types";
 import { SAMPLE_CASE } from "@/content/sample-case";
@@ -80,7 +80,7 @@ describe("scan", () => {
     expect(result).toEqual({
       audit: expect.objectContaining({ status: "preview_ready", totalOwedCents: 64000, itemCount: 5, feeCents: 9600 }),
       summary: { itemCount: 5, totalOwedCents: 64000, linesScanned: SAMPLE_CASE.extraction.ledger.length },
-      decision: { kind: "checkout", feeCents: 9600 },
+      decision: { kind: "checkout", feeCents: 9600, minimumApplied: false },
       paymentUnderReview: false,
     });
     expect(JSON.stringify(result)).not.toMatch(/RUBS|Late Charge|1942/);
@@ -108,18 +108,31 @@ describe("scan", () => {
     expect(result?.decision).toEqual({ kind: "clean", feeCents: 0 });
   });
 
-  it("unlocks for free when 15% is below Stripe's minimum charge", async () => {
-    const tiny: Extractor = {
-      source: "demo",
-      extract: async () => ({
-        ...SAMPLE_CASE.extraction,
-        ledger: [{ id: "x", sequence: 0, date: "2026-02-01", description: "Mystery Fee", kind: "charge", category: "fee", amountCents: 300, reportedBalanceCents: null, confidence: 1 }],
-      }),
-    };
-    const audit = await readyAudit(tiny);
+  const owing = (amountCents: number): Extractor => ({
+    source: "demo",
+    extract: async () => ({
+      ...SAMPLE_CASE.extraction,
+      ledger: [{ id: "x", sequence: 0, date: "2026-02-01", description: "Mystery Fee", kind: "charge", category: "fee", amountCents, reportedBalanceCents: null, confidence: 1 }],
+    }),
+  });
+
+  it("unlocks for free, flagged, when under 50 cents is owed", async () => {
+    const audit = await readyAudit(owing(49));
     await scanAudit(deps, USER, audit.id);
-    expect((await getFreeResult(deps, USER, audit.id))?.audit).toMatchObject({ status: "unlocked", feeCents: 0, totalOwedCents: 300 });
+    const free = await getFreeResult(deps, USER, audit.id);
+    expect(free?.audit).toMatchObject({ status: "unlocked", feeCents: 0, totalOwedCents: 49 });
+    expect(free?.decision).toEqual({ kind: "free_below_minimum", feeCents: 0 });
+    expect(isFreeUnlockBelowMinimum(free!.audit)).toBe(true);
     expect((await getUnlockedReport(deps, USER, audit.id, "en"))?.items).toHaveLength(1);
+  });
+
+  it("charges the 50-cent minimum when 15% of the total is less", async () => {
+    const audit = await readyAudit(owing(300));
+    await scanAudit(deps, USER, audit.id);
+    const free = await getFreeResult(deps, USER, audit.id);
+    expect(free?.audit).toMatchObject({ status: "preview_ready", feeCents: 50, totalOwedCents: 300 });
+    expect(free?.decision).toEqual({ kind: "checkout", feeCents: 50, minimumApplied: true });
+    expect(isFreeUnlockBelowMinimum(free!.audit)).toBe(false);
   });
 
   it("marks the audit failed when extraction throws", async () => {

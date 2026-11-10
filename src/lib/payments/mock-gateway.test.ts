@@ -32,7 +32,7 @@ describe("mock checkout end to end", () => {
     expect(await refunds.refund("pi_mock_abc", "refund-evt_1")).toBe(await refunds.refund("pi_mock_abc", "refund-evt_1"));
     expect(refunds.refunds.size).toBe(1);
     const gateway = new MockCheckoutGateway("http://localhost:3000");
-    const s = await gateway.createSession({ auditId: A1, userId: "u1", amountCents: 9600, totalOwedCents: 64000, locale: "en", customerEmail: null, successUrl: "s", cancelUrl: "c", idempotencyKey: "k" });
+    const s = await gateway.createSession({ auditId: A1, userId: "u1", amountCents: 9600, totalOwedCents: 64000, minimumFeeApplied: false, locale: "en", customerEmail: null, successUrl: "s", cancelUrl: "c", idempotencyKey: "k" });
     await gateway.expireSession(s.id);
     expect(gateway.complete(s.id)).toBeNull();
   });

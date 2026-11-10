@@ -1,7 +1,7 @@
 /**
  * RLS and paywall tests against the real migration SQL, on PGlite (in-process Postgres).
  * Covers: owner isolation, locked findings/letters, no renter writes, server-only tables,
- * Storage folder isolation, the 15% fee check, and the Stripe unlock function.
+ * Storage folder isolation, the fee-policy check, and the Stripe unlock function.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -122,6 +122,15 @@ describe("apply_checkout_paid", () => {
     ]);
   });
 
+  it("checks the paid amount against the stored 50-cent minimum fee", async () => {
+    await db.query(`update public.audits set total_owed_cents = 300, fee_cents = 50 where id = $1`, [AUDIT_A]);
+    await db.query(`update public.findings set charged_cents = 300, owed_cents = 300 where audit_id = $1`, [AUDIT_A]);
+    await db.query(`update public.payments set amount_cents = 50 where stripe_checkout_session_id = 'cs_test_a'`);
+    expect(await pay("evt_m1", "cs_test_a", AUDIT_A, 45)).toBe("amount_mismatch");
+    await db.query(`insert into public.payments (audit_id, user_id, stripe_checkout_session_id, amount_cents) values ($1, $2, 'cs_test_m', 50)`, [AUDIT_A, A]);
+    expect(await pay("evt_m2", "cs_test_m", AUDIT_A, 50)).toBe("unlocked");
+  });
+
   it("flags a second paid session for an unlocked audit as a duplicate payment, then records its refund", async () => {
     await db.exec(`insert into public.payments (audit_id, user_id, stripe_checkout_session_id, amount_cents) values ('${AUDIT_A}', '${A}', 'cs_test_a2', 9600)`);
     expect(await pay("evt_6", "cs_test_a", AUDIT_A, 9600)).toBe("unlocked");
@@ -197,25 +206,36 @@ describe("save_scan_result", () => {
     await expect(as("service_role", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result({ totalOwedCents: 20000, feeCents: 3000 })])))
       .rejects.toThrow(/do not add up/);
     await expect(as("service_role", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result({ feeCents: 100 })])))
-      .rejects.toThrow(/audits_fee_is_15_percent/);
+      .rejects.toThrow(/audits_fee_matches_policy/);
     expect(await rows("select * from public.findings where audit_id = $1", [AUDIT_C])).toEqual([]);
   });
 
-  it("only finishes a scan as preview_ready, clean, or unlocked with a waived ($0) fee", async () => {
+  it("only finishes a scan as preview_ready, clean, or unlocked free when under 50 cents is owed", async () => {
     const save = (overrides: Record<string, unknown>) =>
       as("service_role", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result(overrides)]));
+    const finding = (owed: number) => [{ position: 0, category: "unauthorized_fee", description: "Mystery", firstDate: "2026-02-01", lastDate: "2026-02-01",
+      lineNumbers: [1], chargedCents: owed, allowedCents: 0, owedCents: owed, basis: "lease", citation: null, sourceUrl: null, leaseRef: null, lawNotes: [] }];
     await expect(save({ status: "unlocked", unlockedAt: "2026-11-09T00:00:00Z" })).rejects.toThrow(/may not finish as unlocked/);
     for (const status of ["draft", "processing", "failed"]) {
       await expect(save({ status })).rejects.toThrow(/may not finish as/);
     }
-    await expect(save({ status: "preview_ready", totalOwedCents: 300, feeCents: 0 })).rejects.toThrow(/may not finish as preview_ready/);
+    await expect(save({ status: "preview_ready", totalOwedCents: 300, feeCents: 0, findings: finding(300) })).rejects.toThrow(/may not finish as preview_ready/);
+    // 300 cents owed now pays the 50-cent minimum: a free unlock is refused.
+    await expect(save({ status: "unlocked", unlockedAt: "2026-11-09T00:00:00Z", totalOwedCents: 300, feeCents: 0, findings: finding(300) }))
+      .rejects.toThrow(/may not finish as unlocked/);
     expect((await rows("select status from public.audits where id = $1", [AUDIT_C]))[0].status).toBe("processing");
 
-    const waived = { status: "unlocked", unlockedAt: "2026-11-09T00:00:00Z", totalOwedCents: 300, feeCents: 0,
-      findings: [{ position: 0, category: "unauthorized_fee", description: "Mystery", firstDate: "2026-02-01", lastDate: "2026-02-01",
-        lineNumbers: [1], chargedCents: 300, allowedCents: 0, owedCents: 300, basis: "lease", citation: null, sourceUrl: null, leaseRef: null, lawNotes: [] }] };
-    await save(waived);
-    expect((await rows("select status, fee_cents from public.audits where id = $1", [AUDIT_C]))[0]).toEqual({ status: "unlocked", fee_cents: 0 });
+    await save({ status: "unlocked", unlockedAt: "2026-11-09T00:00:00Z", totalOwedCents: 49, feeCents: 0, findings: finding(49) });
+    expect((await rows("select status, fee_cents, free_unlock_below_minimum from public.audits where id = $1", [AUDIT_C]))[0])
+      .toEqual({ status: "unlocked", fee_cents: 0, free_unlock_below_minimum: true });
+  });
+
+  it("charges the 50-cent minimum when 15% is less", async () => {
+    await as("service_role", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C,
+      result({ totalOwedCents: 300, feeCents: 50, findings: [{ position: 0, category: "unauthorized_fee", description: "Mystery", firstDate: "2026-02-01",
+        lastDate: "2026-02-01", lineNumbers: [1], chargedCents: 300, allowedCents: 0, owedCents: 300, basis: "lease", citation: null, sourceUrl: null, leaseRef: null, lawNotes: [] }] })]));
+    expect((await rows("select status, fee_cents, free_unlock_below_minimum from public.audits where id = $1", [AUDIT_C]))[0])
+      .toEqual({ status: "preview_ready", fee_cents: 50, free_unlock_below_minimum: false });
   });
 
   it("refuses an audit that is not processing, and renters cannot call it", async () => {
@@ -225,13 +245,25 @@ describe("save_scan_result", () => {
 });
 
 describe("constraints", () => {
-  it("rejects any fee other than 15% of the total", async () => {
-    await expect(db.query(`update public.audits set fee_cents = 12800 where id = $1`, [AUDIT_A])).rejects.toThrow(/audits_fee_is_15_percent/);
+  it("rejects any fee other than max(15% of the total, 50 cents)", async () => {
+    await expect(db.query(`update public.audits set fee_cents = 12800 where id = $1`, [AUDIT_A])).rejects.toThrow(/audits_fee_matches_policy/);
   });
 
-  it("allows a waived fee only below Stripe's 50-cent minimum", async () => {
-    await expect(db.query(`update public.audits set total_owed_cents = 329, fee_cents = 0 where id = $1`, [AUDIT_A])).resolves.toBeDefined();
-    await expect(db.query(`update public.audits set total_owed_cents = 330, fee_cents = 0 where id = $1`, [AUDIT_A])).rejects.toThrow(/audits_fee_is_15_percent/);
+  it.each([
+    [0, 0, true], [49, 0, true], [49, 50, false],
+    [50, 50, true], [50, 8, false], [50, 0, false],
+    [333, 50, true], [334, 50, true], [334, 0, false],
+    [1_000_000, 150_000, true], [1_000_000, 50, false],
+  ])("owed %i cents with fee %i cents is allowed: %s", async (owed, fee, ok) => {
+    const q = db.query(`update public.audits set total_owed_cents = $2, fee_cents = $3 where id = $1`, [AUDIT_A, owed, fee]);
+    if (ok) await expect(q).resolves.toBeDefined();
+    else await expect(q).rejects.toThrow(/audits_fee_matches_policy/);
+  });
+
+  it("flags free unlocks under the minimum on the record, indexed for review", async () => {
+    await db.query(`update public.audits set status = 'unlocked', unlocked_at = now(), total_owed_cents = 49, fee_cents = 0 where id = $1`, [AUDIT_A]);
+    expect(await rows(`select id from public.audits where free_unlock_below_minimum`)).toEqual([{ id: AUDIT_A }]);
+    expect(await rows(`select indexname from pg_indexes where indexname = 'audits_free_unlock_below_minimum_idx'`)).toHaveLength(1);
   });
 });
 

@@ -5,6 +5,8 @@ export interface CheckoutSessionInput {
   userId: string;
   amountCents: number;
   totalOwedCents: number;
+  /** The fee is the 50-cent minimum, not 15% (the line item says so). */
+  minimumFeeApplied: boolean;
   locale: Locale;
   customerEmail: string | null;
   successUrl: string;

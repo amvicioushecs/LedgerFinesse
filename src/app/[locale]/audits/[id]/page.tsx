@@ -6,7 +6,7 @@ import { fill, getDictionary } from "@/content/dictionaries";
 import { WaitForStatus } from "@/components/audit/wait-for-status";
 import { Disclaimer } from "@/components/disclaimer";
 import { ReportView } from "@/components/report/report-view";
-import { getFreeResult, getUnlockedReport } from "@/lib/audits/service";
+import { getFreeResult, getUnlockedReport, isFreeUnlockBelowMinimum } from "@/lib/audits/service";
 import type { Locale } from "@/lib/i18n/locales";
 import { currentLocale } from "@/lib/i18n/server";
 import { isUuid } from "@/lib/ids";
@@ -45,8 +45,8 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
     if (!report) notFound();
     return (
       <>
-        {audit.feeCents === 0 ? (
-          <p role="note" className="mx-auto mt-6 max-w-5xl rounded-md bg-mint p-3 text-sm font-semibold sm:px-6">{r.waived}</p>
+        {isFreeUnlockBelowMinimum(audit) ? (
+          <p role="note" className="mx-auto mt-6 max-w-5xl rounded-md bg-mint p-3 text-sm font-semibold sm:px-6" data-testid="free-unlock-flag">{r.waived}</p>
         ) : null}
         <ReportView
           locale={locale}
@@ -145,8 +145,8 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
       {checkout === "rate" ? <p role="alert" className="mt-6 rounded-md bg-butter p-3 text-sm font-semibold text-alert">{r.checkoutRate}</p> : null}
 
       <section className="mt-6 rounded-lg border-2 border-forest p-6" data-testid="fee-gate">
-        <h2 className="font-display text-2xl font-bold">{r.feeTitle}</h2>
-        <p className="mt-2" data-testid="fee-line">{fill(r.feeLine, { fee, total })}</p>
+        <h2 className="font-display text-2xl font-bold">{decision.minimumApplied ? fill(r.feeTitleMinimum, { fee }) : r.feeTitle}</h2>
+        <p className="mt-2" data-testid="fee-line">{fill(decision.minimumApplied ? r.feeLineMinimum : r.feeLine, { fee, total })}</p>
         <p className="mt-1 text-sm text-muted">{fill(r.keep, { net, total })}</p>
         <form action="/api/checkout" method="post" className="mt-5">
           <input type="hidden" name="auditId" value={audit.id} />

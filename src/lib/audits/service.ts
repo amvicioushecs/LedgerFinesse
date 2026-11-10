@@ -177,12 +177,12 @@ async function runClaimedScan(
         }));
 
   await deps.repo.saveScanResult(auditId, {
-    status: decision.kind === "clean" ? "clean" : decision.kind === "waived" ? "unlocked" : "preview_ready",
+    status: decision.kind === "clean" ? "clean" : decision.kind === "free_below_minimum" ? "unlocked" : "preview_ready",
     totalOwedCents: report.totalOwedCents,
     itemCount: report.items.length,
     linesScanned: report.linesScanned,
     feeCents: decision.feeCents,
-    unlockedAt: decision.kind === "waived" ? now.toISOString() : null,
+    unlockedAt: decision.kind === "free_below_minimum" ? now.toISOString() : null,
     engineVersion: ENGINE_VERSION,
     extraction: { source: deps.extractor.source, data: extraction },
     findings: toStoredFindings(report),
@@ -203,6 +203,11 @@ export async function getAuditStatus(deps: AuditDeps, userId: string, auditId: s
 export async function listAudits(deps: AuditDeps, userId: string): Promise<AuditRecord[]> {
   await failStaleScans(deps, userId);
   return deps.repo.listAudits(userId);
+}
+
+/** Unlocked free because under 50 cents was owed (no charge). Hector reviews these; stored as audits.free_unlock_below_minimum. */
+export function isFreeUnlockBelowMinimum(audit: Pick<AuditRecord, "status" | "feeCents" | "totalOwedCents">): boolean {
+  return audit.status === "unlocked" && audit.feeCents === 0 && (audit.totalOwedCents ?? 0) > 0;
 }
 
 export interface FreeResult {

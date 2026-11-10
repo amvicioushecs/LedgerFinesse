@@ -18,6 +18,17 @@ export function createStripeClient(secretKey: string): Stripe {
   });
 }
 
+function lineItemDescription(input: CheckoutSessionInput): string {
+  const total = formatUsd(input.totalOwedCents);
+  if (input.minimumFeeApplied) {
+    const fee = formatUsd(input.amountCents);
+    return input.locale === "es"
+      ? `Tarifa mínima de ${fee} por los ${total} encontrados en su auditoría`
+      : `${fee} minimum fee for the ${total} found in your audit`;
+  }
+  return input.locale === "es" ? `15% de ${total} encontrados en su auditoría` : `15% of the ${total} found in your audit`;
+}
+
 function toInfo(s: Stripe.Checkout.Session): CheckoutSessionInfo {
   const status: CheckoutSessionInfo["status"] = s.status === "complete" ? "complete" : s.status === "expired" ? "expired" : "open";
   return { id: s.id, url: s.url, status };
@@ -40,10 +51,7 @@ export class StripeCheckoutGateway implements CheckoutGateway {
               unit_amount: input.amountCents,
               product_data: {
                 name: input.locale === "es" ? "Desbloqueo de auditoría LedgerFinesse" : "LedgerFinesse audit unlock",
-                description:
-                  input.locale === "es"
-                    ? `15% de ${formatUsd(input.totalOwedCents)} encontrados en su auditoría`
-                    : `15% of the ${formatUsd(input.totalOwedCents)} found in your audit`,
+                description: lineItemDescription(input),
               },
             },
           },
