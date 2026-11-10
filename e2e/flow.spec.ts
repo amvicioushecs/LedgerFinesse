@@ -140,3 +140,15 @@ test("malformed audit ids are 404s, not server errors", async ({ request, baseUR
   const res = await request.post("/api/checkout", { form: { auditId: "x'; drop", locale: "en" }, headers: { origin: baseURL! }, maxRedirects: 0 });
   expect(res.status()).toBe(404);
 });
+
+test("sign-in never redirects off-site, even through dot-segment tricks", async ({ request, baseURL }) => {
+  for (const next of ["/.//evil.com", "/%2e%2e//evil.com", "//evil.com"]) {
+    const res = await request.post("/auth/signin", {
+      form: { email: `redirect-${Date.now()}@example.test`, next, locale: "en" },
+      headers: { origin: baseURL! },
+      maxRedirects: 0,
+    });
+    expect(res.status(), next).toBe(303);
+    expect(new URL(res.headers()["location"], baseURL).origin, next).toBe(new URL(baseURL!).origin);
+  }
+});

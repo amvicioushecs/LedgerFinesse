@@ -21,6 +21,9 @@ export function safeNextPath(next: string | null | undefined, locale: Locale): s
   } catch {
     return fallback;
   }
-  if (url.origin !== PROBE_ORIGIN) return fallback;
-  return `${url.pathname}${url.search}${url.hash}`;
+  // Normalization can collapse dot segments into "//host" ("/.//evil.com", "/%2e%2e//evil.com"),
+  // which a browser reads as another origin. Check the output, not just the input.
+  const out = `${url.pathname}${url.search}${url.hash}`;
+  if (url.origin !== PROBE_ORIGIN || out.startsWith("//")) return fallback;
+  return out;
 }

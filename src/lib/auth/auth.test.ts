@@ -22,6 +22,14 @@ describe("safeNextPath", () => {
     }
   });
 
+  it("rejects paths that dot-segment normalization collapses into a protocol-relative //host", () => {
+    for (const bad of ["/.//evil.com", "/%2e%2e//evil.com", "/%2e//evil.com", "/a/..//evil.com", "/./%2e//evil.com/x?y#z"]) {
+      const out = safeNextPath(bad, "en");
+      expect(out, bad).toBe("/en/audits/new");
+      expect(new URL(out, "http://localhost:3000").origin).toBe("http://localhost:3000");
+    }
+  });
+
   it("returns a normalized same-origin path with query and hash", () => {
     expect(safeNextPath("/en/audits/./new?x=1#top", "en")).toBe("/en/audits/new?x=1#top");
   });
