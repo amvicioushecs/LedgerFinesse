@@ -185,17 +185,19 @@ describe("updatePassword", () => {
   });
 });
 
-describe("password change needs a recovery session or a recent sign-in", () => {
+describe("password change needs a recent sign-in", () => {
   const NOW = 1_800_000_000;
   const RECENT = 600;
 
-  it("allows a recovery session, or any sign-in within the window", () => {
-    expect(mayChangePassword([{ method: "recovery", at: NOW - 3000 }], NOW, RECENT)).toBe(true);
-    expect(mayChangePassword([{ method: "password", at: NOW - 599 }], NOW, RECENT)).toBe(true);
+  it("allows any sign-in within the window, including a recent recovery or otp", () => {
+    expect(mayChangePassword([{ method: "recovery", at: NOW - 599 }], NOW, RECENT)).toBe(true);
     expect(mayChangePassword([{ method: "otp", at: NOW - 30 }], NOW, RECENT)).toBe(true);
+    expect(mayChangePassword([{ method: "password", at: NOW - 599 }], NOW, RECENT)).toBe(true);
   });
 
-  it("refuses an older session that did not come from a reset link", () => {
+  it("refuses an older session, including an old recovery sign-in", () => {
+    expect(mayChangePassword([{ method: "recovery", at: NOW - 601 }], NOW, RECENT)).toBe(false);
+    expect(mayChangePassword([{ method: "otp", at: NOW - 3000 }], NOW, RECENT)).toBe(false);
     expect(mayChangePassword([{ method: "password", at: NOW - 601 }], NOW, RECENT)).toBe(false);
     expect(mayChangePassword([], NOW, RECENT)).toBe(false);
   });

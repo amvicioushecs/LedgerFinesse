@@ -92,11 +92,13 @@ export async function requestPasswordReset(
 export type AuthMethod = { method: string; at: number };
 
 /**
- * A password may be changed from a recovery session (the reset link) or within `recentSeconds` of any sign-in,
- * so a session left open on a shared computer can't be used to take over the account.
+ * A password may be changed within `recentSeconds` of a sign-in (including a recovery/reset sign-in).
+ * Method names are ignored: a PKCE recovery `amr` entry persists for the whole session, so a timeless
+ * recovery exemption would let an old session change the password. A session left open on a shared
+ * computer can't be used to take over the account.
  */
 export function mayChangePassword(methods: AuthMethod[], nowSeconds: number, recentSeconds: number): boolean {
-  return methods.some((m) => m.method === "recovery" || nowSeconds - m.at <= recentSeconds);
+  return methods.some((m) => nowSeconds - m.at <= recentSeconds);
 }
 
 export async function updatePassword(

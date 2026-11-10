@@ -121,6 +121,7 @@ export const es: Dictionary = {
       sendReset: "Envíame un enlace para restablecerla",
       resetSent: "Si ese correo tiene una cuenta, te enviamos un enlace para restablecerla. Revisa tu bandeja de entrada y la carpeta de spam.",
       expired: "Ese enlace venció o ya se usó. Pide uno nuevo.",
+      confirmedSignIn: "Tu correo está confirmado. Inicia sesión para continuar.",
       resetTitle: "Crea una contraseña nueva",
       newLabel: "Contraseña nueva",
       save: "Guardar contraseña nueva",

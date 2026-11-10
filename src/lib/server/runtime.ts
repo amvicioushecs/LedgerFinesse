@@ -9,7 +9,8 @@ import { SupabaseAuditRepository, SupabaseDocumentStore } from "@/lib/audits/sup
 import { neonQuery } from "@/lib/db/neon";
 import type { AuditRepository, Extractor } from "@/lib/audits/types";
 import {
-  RECOVERY_PENDING_COOKIE, RECOVERY_PENDING_MAX_AGE, decodeHeld, encodeHeld, type CallbackDeps, type HeldSession, type RecoveryConfirmDeps,
+  RECOVERY_PENDING_COOKIE, RECOVERY_PENDING_MAX_AGE, decodeHeld, encodeHeld, heldSessionExpired,
+  type CallbackDeps, type HeldSession, type RecoveryConfirmDeps,
 } from "@/lib/auth/callback";
 import { DEV_SESSION_COOKIE, signDevSession, verifyDevSession } from "@/lib/auth/dev-session";
 import { MemoryPasswordProvider } from "@/lib/auth/memory-password";
@@ -124,6 +125,11 @@ export async function pendingRecoveryEmail(): Promise<string | null> {
   const env = serverEnv();
   const held = env.backend === "supabase" ? await heldRecovery() : null;
   if (!held) return null;
+  if (heldSessionExpired(held, Math.floor(Date.now() / 1000))) {
+    (await cookies()).delete(RECOVERY_PENDING_COOKIE);
+    await recoveryConfirmDeps().revoke(held);
+    return null;
+  }
   const { data, error } = await supabaseDetached(env).auth.getUser(held.accessToken);
   return error ? null : (data.user?.email ?? null);
 }
@@ -213,8 +219,8 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 }
 
 /**
- * Whether this session may set a new password: a recovery session (reset link) or a recent sign-in, from the
- * verified JWT's `amr` claim (dev sessions carry a signed sign-in time).
+ * Whether this session may set a new password: a sign-in (including recovery) within the recent window, from the
+ * verified JWT's `amr` claim timestamps (dev sessions carry a signed sign-in time).
  */
 export async function passwordChangeAllowed(): Promise<boolean> {
   const env = serverEnv();
@@ -231,8 +237,7 @@ export async function passwordChangeAllowed(): Promise<boolean> {
     const { data, error } = await (await supabaseForRequest(env)).auth.getClaims();
     const amr = error ? [] : ((data?.claims.amr ?? []) as unknown[]);
     methods = amr.flatMap((m) =>
-      typeof m === "object" && m && "method" in m && "timestamp" in m ? [{ method: String(m.method), at: Number(m.timestamp) }]
-      : m === "recovery" ? [{ method: "recovery", at: 0 }] : []);
+      typeof m === "object" && m && "method" in m && "timestamp" in m ? [{ method: String(m.method), at: Number(m.timestamp) }] : []);
   }
   return mayChangePassword(methods, now, env.passwordChangeRecentSeconds);
 }

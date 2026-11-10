@@ -119,6 +119,7 @@ export const en = {
       sendReset: "Email me a reset link",
       resetSent: "If that email has an account, we sent a reset link. Check your inbox and spam folder.",
       expired: "That link has expired or was already used. Request a new one.",
+      confirmedSignIn: "Your email is confirmed, sign in to continue.",
       resetTitle: "Set a new password",
       newLabel: "New password",
       save: "Save new password",

@@ -81,6 +81,9 @@ describe("clientIp: only a header we are configured to trust", () => {
   it("ignores values that are not an IP address, so junk can't mint new keys", () => {
     expect(clientIp(new Headers({ "x-real-ip": "x".repeat(500) }), "x-real-ip")).toBeNull();
     expect(clientIp(new Headers({ "x-real-ip": "1.2.3.4; drop" }), "x-real-ip")).toBeNull();
+    expect(clientIp(new Headers({ "x-real-ip": "aaaa" }), "x-real-ip")).toBeNull();
+    expect(clientIp(new Headers({ "x-real-ip": "::::" }), "x-real-ip")).toBeNull();
+    expect(clientIp(new Headers({ "x-real-ip": "1.2.3" }), "x-real-ip")).toBeNull();
   });
 });
 

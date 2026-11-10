@@ -13,7 +13,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t.signup.title, robots: PRIVATE_ROBOTS };
 }
 
-const OK_STATUSES = new Set(["confirm", "reset_sent", "recovery_cancelled", "password_reset"]);
+const NOTICE_STATUSES = new Set(["confirm", "reset_sent", "confirmed_signin", "recovery_cancelled", "password_reset"]);
 
 async function SignInForm({ locale, searchParams }: { locale: Locale; searchParams: PageProps<"/[locale]/signin">["searchParams"] }) {
   const t = getDictionary(locale);
@@ -30,8 +30,10 @@ async function SignInForm({ locale, searchParams }: { locale: Locale; searchPara
   const p = t.signup.password;
   const passwordStatus: Record<string, string> = {
     invalid: p.invalid, locked: p.locked, reauth: p.reauth, unconfirmed: p.unconfirmed, weak: fill(p.weak, { min: PASSWORD_MIN_LENGTH }), confirm: p.confirmSent,
-    reset_sent: p.resetSent, expired: p.expired, recovery_cancelled: p.confirmCancelled, leaked: p.leaked, password_reset: p.passwordReset,
+    reset_sent: p.resetSent, expired: p.expired, confirmed_signin: p.confirmedSignIn, recovery_cancelled: p.confirmCancelled,
+    leaked: p.leaked, password_reset: p.passwordReset,
   };
+  const statusIsNotice = status !== null && NOTICE_STATUSES.has(status);
   // Neon backend: an emailed code is waiting in this browser (sign-in or email verification).
   const pending = await pendingCode();
   const codePending = pending && pending.purpose !== "reset" ? pending : null;
@@ -83,8 +85,8 @@ async function SignInForm({ locale, searchParams }: { locale: Locale; searchPara
           <span className="mt-1 block text-xs text-muted">{fill(p.hint, { min: PASSWORD_MIN_LENGTH })}</span>
         </label>
         {status && passwordStatus[status] ? (
-          <p role={OK_STATUSES.has(status) ? "status" : "alert"} data-testid="password-status"
-            className={OK_STATUSES.has(status) ? "rounded-md bg-mint p-3 text-sm font-semibold" : "text-sm font-semibold text-alert"}>
+          <p role={statusIsNotice ? "status" : "alert"} data-testid="password-status"
+            className={statusIsNotice ? "rounded-md bg-mint p-3 text-sm font-semibold" : "text-sm font-semibold text-alert"}>
             {passwordStatus[status]}
           </p>
         ) : null}
