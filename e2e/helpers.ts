@@ -2,30 +2,17 @@ import AxeBuilder from "@axe-core/playwright";
 import Stripe from "stripe";
 import { expect, test as base, type Browser, type Page } from "@playwright/test";
 
-let ipCounter = 0;
-export function uniqueIp() {
-  ipCounter += 1;
-  const n = (process.pid * 7919 + ipCounter + Date.now()) % 65000;
-  return `198.18.${Math.floor(n / 250)}.${(n % 250) + 1}`;
-}
-
-export const test = base.extend({
-  context: async ({ context }, provide) => {
-    await context.setExtraHTTPHeaders({ "cf-connecting-ip": uniqueIp() });
-    await provide(context);
-  },
-});
+export const test = base;
 export { expect };
 
 export async function isolatedContext(browser: Browser, baseURL: string | undefined) {
-  return browser.newContext({ baseURL, extraHTTPHeaders: { "cf-connecting-ip": uniqueIp() } });
+  return browser.newContext({ baseURL });
 }
 
 export const LOCALES = ["en", "es"] as const;
 export type Locale = (typeof LOCALES)[number];
 
-export const SAMPLE_TOTAL = "$640.00";
-export const SAMPLE_FEE = "$96.00";
+const SAMPLE_TOTAL = "$640.00";
 
 /** Local mock-only secret (src/lib/payments/mock-gateway.ts). Not a real credential. */
 const MOCK_WEBHOOK_SECRET = "whsec_local_mock_only";
