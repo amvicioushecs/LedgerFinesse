@@ -98,6 +98,10 @@ export class MemoryAuditRepository implements AuditRepository {
     return found ? { ...found } : null;
   }
 
+  async countPayments(auditId: string) {
+    return [...this.payments.values()].filter((p) => p.auditId === auditId).length;
+  }
+
   async setPaymentStatus(checkoutSessionId: string, status: PaymentRecord["status"]) {
     const payment = this.payments.get(checkoutSessionId);
     if (payment && payment.status === "pending") payment.status = status;

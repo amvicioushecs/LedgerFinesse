@@ -20,7 +20,7 @@ describe("parseServerEnv", () => {
   });
 
   it("refuses local shortcuts in production", () => {
-    expect(() => parseServerEnv({ SITE_ENV: "production" })).toThrow(/LF_BACKEND=memory.*STRIPE_MODE=mock.*EXTRACTION_MODE=demo/s);
+    expect(() => parseServerEnv({ SITE_ENV: "production" })).toThrow(/LF_BACKEND=memory[^]*STRIPE_MODE=mock[^]*EXTRACTION_MODE=demo/);
   });
 
   it("refuses live Stripe keys outside production", () => {
@@ -30,7 +30,7 @@ describe("parseServerEnv", () => {
 
   it("lists every missing variable for the chosen modes", () => {
     expect(() => parseServerEnv({ LF_BACKEND: "supabase", STRIPE_MODE: "stripe", EXTRACTION_MODE: "gemini" })).toThrow(
-      /NEXT_PUBLIC_SUPABASE_URL.*NEXT_PUBLIC_SUPABASE_ANON_KEY.*SUPABASE_SERVICE_ROLE_KEY.*STRIPE_SECRET_KEY.*STRIPE_WEBHOOK_SECRET.*GEMINI_API_KEY/s,
+      /NEXT_PUBLIC_SUPABASE_URL[^]*NEXT_PUBLIC_SUPABASE_ANON_KEY[^]*SUPABASE_SERVICE_ROLE_KEY[^]*STRIPE_SECRET_KEY[^]*STRIPE_WEBHOOK_SECRET[^]*GEMINI_API_KEY/,
     );
   });
 

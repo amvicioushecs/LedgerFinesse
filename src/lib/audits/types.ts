@@ -116,6 +116,8 @@ export interface AuditRepository {
   findUnlockedLetter(userId: string, auditId: string, locale: Locale): Promise<StoredLetter | null>;
   insertPayment(payment: PaymentRecord): Promise<void>;
   findPendingPayment(auditId: string): Promise<PaymentRecord | null>;
+  /** Every checkout attempt ever recorded for the audit (any status). */
+  countPayments(auditId: string): Promise<number>;
   setPaymentStatus(checkoutSessionId: string, status: PaymentRecord["status"]): Promise<void>;
   applyCheckoutPaid(event: CheckoutPaidEvent): Promise<CheckoutPaidOutcome>;
 }
