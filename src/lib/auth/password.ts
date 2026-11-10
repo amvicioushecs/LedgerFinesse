@@ -24,14 +24,16 @@ interface Deps {
   /** Per-email wrong-password limit (5 per 15 minutes by default): reserve before, forgive unless the password was wrong. */
   passwordFailures: { reserve(email: string): Promise<RateLimitOutcome>; forgive(email: string): Promise<void> };
   appUrl: string;
+  /** Breach-data check on new passwords (Neon backend: HIBP range API). Omitted: no check. */
+  leakedPassword?: (password: string) => Promise<boolean>;
 }
 
-export type PasswordStatus = "error" | "weak" | "rate" | "unavailable" | "locked" | "invalid" | "unconfirmed" | "confirm";
+export type PasswordStatus = "error" | "weak" | "leaked" | "rate" | "unavailable" | "locked" | "invalid" | "unconfirmed" | "confirm";
 export type PasswordResult = { kind: "redirect"; to: string } | { kind: "back"; status: PasswordStatus; next: string };
 
 const validEmail = (email: string) => email.length <= 320 && EMAIL.test(email);
 const utf8 = new TextEncoder();
-const validPassword = (password: string) =>
+export const validPassword = (password: string) =>
   [...password].length >= PASSWORD_MIN_LENGTH && utf8.encode(password).length <= PASSWORD_MAX_LENGTH;
 
 const limitStatus = (outcome: RateLimitOutcome) => (outcome === "limited" ? ("rate" as const) : ("unavailable" as const));
@@ -64,6 +66,7 @@ export async function passwordSignIn(
     if (result !== "invalid") await deps.passwordFailures.forgive(subject);
     return result === "ok" ? { kind: "redirect", to: next } : back(result);
   }
+  if (await deps.leakedPassword?.(input.password)) return back("leaked");
   const result = await deps.provider.signUp(email, input.password, callbackUrl(deps.appUrl, input.locale, next));
   return result === "signed_in" ? { kind: "redirect", to: next } : back(result);
 }
