@@ -10,7 +10,7 @@ export const es: Dictionary = {
   },
   nav: { startScan: "Escaneo gratis", blog: "Blog", sample: "Auditoría de ejemplo", signIn: "Iniciar sesión", signOut: "Cerrar sesión", myAudits: "Mis auditorías", language: "Idioma", switchTo: "English" },
   disclaimer:
-    "LedgerFinesse no es un despacho de abogados; ofrece análisis contable automatizado con OCR y plantillas de cartas de disputa, no representación legal formal.",
+    "LedgerFinesse no es un despacho de abogados; ofrece análisis contable automatizado con OCR y plantillas de cartas de disputa, no representación legal formal. No constituye asesoría legal.",
   footer: { tagline: "Escaneo OCR gratis · 15% solo cuando te deben dinero (mín. $0.50) · © 2026 LedgerFinesse" },
   hero: {
     eyebrow: "Es hora de exigir cuentas",
@@ -182,6 +182,7 @@ export const es: Dictionary = {
     feeMinimumNote: "Aviso: en una cantidad pequeña, la tarifa mínima puede ser gran parte de lo que te deben, o hasta todo. Desbloquea solo si el reporte te vale la pena.",
     keep: "Te quedas con {net} de {total}",
     pay: "Pagar {fee} y desbloquear el panel",
+    payAgain: "Intenta pagar de nuevo",
     paying: "Abriendo el pago seguro…",
     securedBy: "Pago seguro con Stripe. Nunca vemos el número de tu tarjeta.",
     zeroTitle: "Buenas noticias: tu estado de cuenta coincide con tu contrato ($0.00 que te deban).",
