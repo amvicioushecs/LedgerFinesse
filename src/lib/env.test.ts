@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseServerEnv } from "@/lib/env";
+import { parseServerEnv, stripeWebhookEnabled } from "@/lib/env";
 
 const supabase = {
   NEXT_PUBLIC_SUPABASE_URL: "https://abc.supabase.co",
@@ -21,6 +21,18 @@ describe("parseServerEnv", () => {
 
   it("refuses local shortcuts in production", () => {
     expect(() => parseServerEnv({ SITE_ENV: "production" })).toThrow(/LF_BACKEND=memory[^]*STRIPE_MODE=mock[^]*EXTRACTION_MODE=demo/);
+  });
+
+  it("allows mock Stripe only in development (its webhook secret is public)", () => {
+    expect(() => parseServerEnv({ SITE_ENV: "preview", LF_BACKEND: "supabase", ...supabase })).toThrow(/STRIPE_MODE=mock is only allowed in SITE_ENV=development/);
+    expect(parseServerEnv({ SITE_ENV: "development" }).stripeMode).toBe("mock");
+  });
+
+  it("serves the Stripe webhook only for real Stripe or local development", () => {
+    expect(stripeWebhookEnabled({ stripeMode: "stripe", siteEnv: "preview" })).toBe(true);
+    expect(stripeWebhookEnabled({ stripeMode: "mock", siteEnv: "development" })).toBe(true);
+    expect(stripeWebhookEnabled({ stripeMode: "mock", siteEnv: "preview" })).toBe(false);
+    expect(stripeWebhookEnabled({ stripeMode: "mock", siteEnv: "production" })).toBe(false);
   });
 
   it("refuses live Stripe keys outside production", () => {

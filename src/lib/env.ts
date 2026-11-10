@@ -49,6 +49,9 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     ].filter(Boolean);
     if (shortcuts.length > 0) errors.push(`production refuses ${shortcuts.join(", ")}`);
     if (!appUrl.startsWith("https://")) errors.push("NEXT_PUBLIC_APP_URL must be https in production");
+  } else if (siteEnv !== "development" && stripeMode === "mock") {
+    // The mock webhook secret is in the public repo: anyone could sign a "paid" event.
+    errors.push("STRIPE_MODE=mock is only allowed in SITE_ENV=development");
   }
 
   const supabase =
@@ -79,6 +82,11 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     gemini,
     devSessionSecret: raw.DEV_SESSION_SECRET?.trim() || "local-dev-only-not-a-secret",
   };
+}
+
+/** The webhook accepts mock-signed events only on a developer machine. */
+export function stripeWebhookEnabled(env: Pick<ServerEnv, "stripeMode" | "siteEnv">): boolean {
+  return env.stripeMode === "stripe" || (env.stripeMode === "mock" && env.siteEnv === "development");
 }
 
 let cached: ServerEnv | null = null;
