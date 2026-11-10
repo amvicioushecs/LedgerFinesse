@@ -1,4 +1,4 @@
-import { LOCALES, expect, expectNoAxeViolations, headMeta, isolatedContext, openCheckout, postWebhook, scan, signIn, signedCheckoutEvent, smallTouchTargets, SAMPLE_TOTAL, test, type Locale } from "./helpers";
+import { LOCALES, expect, expectNoAxeViolations, headMeta, isolatedContext, openCheckout, postWebhook, scan, signIn, signedCheckoutEvent, smallTouchTargets, test, type Locale } from "./helpers";
 
 test.describe.configure({ mode: "default" });
 

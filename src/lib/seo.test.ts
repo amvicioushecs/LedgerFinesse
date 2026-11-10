@@ -24,7 +24,7 @@ describe("openGraphFor", () => {
       siteName: "LedgerFinesse",
       locale: "es_ES",
     });
-    expect(localeAlternates("en", "/").canonical).toBe("https://app.example.test/en");
+    expect(localeAlternates("en", "/")?.canonical).toBe("https://app.example.test/en");
   });
 
   it("keeps article fields on blog posts and still emits site_name and a regional locale", () => {
