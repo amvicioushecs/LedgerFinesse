@@ -29,7 +29,7 @@ async function ResetForm({ locale, searchParams }: { locale: Locale; searchParam
       </label>
       {status === "weak" || status === "rate" || status === "error" ? (
         <p role="alert" className="text-sm font-semibold text-alert" data-testid="password-status">
-          {status === "weak" ? p.weak : status === "rate" ? getDictionary(locale).signup.rateLimited : p.updateError}
+          {status === "weak" ? fill(p.weak, { min: PASSWORD_MIN_LENGTH }) : status === "rate" ? getDictionary(locale).signup.rateLimited : p.updateError}
         </p>
       ) : null}
       <button type="submit" className="btn btn-gold w-full" data-testid="update-password">{p.save}</button>

@@ -166,6 +166,14 @@ export class MemoryAuditRepository implements AuditRepository {
     return this.reviews.some((r) => r.auditId === auditId && r.refundId === null);
   }
 
+  async hasUnknownSessionReview(auditId: string) {
+    return this.reviews.some((r) => r.auditId === auditId && r.refundId === null && r.reason === "unknown_session");
+  }
+
+  async hasPendingRefund(auditId: string) {
+    return this.reviews.some((r) => r.auditId === auditId && r.refundId === null && REFUNDABLE_REASONS.has(r.reason));
+  }
+
   private refundable(eventId: string) {
     return this.reviews.find((r) => r.eventId === eventId && REFUNDABLE_REASONS.has(r.reason) && r.refundId === null);
   }

@@ -32,7 +32,7 @@ describe("StripeCheckoutGateway line item", () => {
     expect(item(0)).toMatchObject({ currency: "usd", unit_amount: 9600 });
     expect(item(0).product_data!.description).toBe("15% of the $640.00 found in your audit");
     expect(item(1)).toMatchObject({ currency: "usd", unit_amount: 50 });
-    expect(item(1).product_data!.description).toBe("Tarifa mínima de $0.50 por los $3.00 encontrados en su auditoría");
+    expect(item(1).product_data!.description).toBe("Tarifa mínima de $0.50 sobre los $3.00 encontrados en tu auditoría");
     expect(calls[1].options.idempotencyKey).toBe("k");
   });
 });

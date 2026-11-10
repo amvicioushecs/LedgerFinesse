@@ -24,10 +24,10 @@ function lineItemDescription(input: CheckoutSessionInput): string {
   if (input.minimumFeeApplied) {
     const fee = formatUsd(input.amountCents);
     return input.locale === "es"
-      ? `Tarifa mínima de ${fee} por los ${total} encontrados en su auditoría`
-      : `${fee} minimum fee for the ${total} found in your audit`;
+      ? `Tarifa mínima de ${fee} sobre los ${total} encontrados en tu auditoría`
+      : `${fee} minimum fee on the ${total} found in your audit`;
   }
-  return input.locale === "es" ? `15% de ${total} encontrados en su auditoría` : `15% of the ${total} found in your audit`;
+  return input.locale === "es" ? `15% de los ${total} encontrados en tu auditoría` : `15% of the ${total} found in your audit`;
 }
 
 function toInfo(s: Stripe.Checkout.Session): CheckoutSessionInfo {
