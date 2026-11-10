@@ -27,7 +27,7 @@ With no env set, the app runs fully local (development only). It uses an in-memo
 ## Supabase
 - Migration: `supabase/migrations/20261109000000_site_v1.sql` (tables, RLS, private `documents` bucket, `save_scan_result` and `apply_checkout_paid`). Apply it to a non-production project first: `supabase db push --db-url <staging url>`.
 - RLS tests run on PGlite with a Supabase stub (`src/lib/db/rls.test.ts`), with no Supabase connection.
-- Auth: email magic link only. Add `{APP_URL}/auth/callback` to the allowed redirect URLs.
+- Auth: email magic link and email + password (Confirm email ON). Add `{APP_URL}/auth/callback` to the allowed redirect URLs. Keep the default email templates (`{{ .ConfirmationURL }}`): magic link and sign-up confirmation must arrive as a PKCE `code`; `/auth/callback` refuses a `token_hash` for them (login CSRF). A recovery template may link `{APP_URL}/auth/callback?token_hash={{ .TokenHash }}&type=recovery&locale=en` for cross-device resets; that session is held until the person confirms "Continue as <email>".
 
 ## Stripe (test mode)
 - Use a `sk_test_`/`rk_test_` key. A Stripe sandbox is recommended.

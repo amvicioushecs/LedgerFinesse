@@ -6,6 +6,9 @@ import { MemoryAuditRepository, MemoryDocumentStore } from "@/lib/audits/memory-
 import type { AuditDeps } from "@/lib/audits/service";
 import { SupabaseAuditRepository, SupabaseDocumentStore } from "@/lib/audits/supabase-repository";
 import type { AuditRepository, Extractor } from "@/lib/audits/types";
+import {
+  RECOVERY_PENDING_COOKIE, RECOVERY_PENDING_MAX_AGE, decodeHeld, encodeHeld, type CallbackDeps, type HeldSession, type RecoveryConfirmDeps,
+} from "@/lib/auth/callback";
 import { DEV_SESSION_COOKIE, signDevSession, verifyDevSession } from "@/lib/auth/dev-session";
 import { MemoryPasswordProvider } from "@/lib/auth/memory-password";
 import type { PasswordAuthProvider } from "@/lib/auth/password";
@@ -72,6 +75,68 @@ function supabaseAdmin(env: ServerEnv): SupabaseClient {
   return createClient(env.supabase.url, env.supabase.serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+}
+
+/** Anon client with no cookie storage: verifies a recovery link without signing this browser in. */
+function supabaseDetached(env: ServerEnv): SupabaseClient {
+  if (!env.supabase) throw new Error("Supabase is not configured");
+  return createClient(env.supabase.url, env.supabase.anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+}
+
+/** /auth/callback deps. The memory backend sends no email links, so every link is refused there. */
+export async function callbackDeps(): Promise<CallbackDeps> {
+  const env = serverEnv();
+  if (env.backend === "memory") return { exchangeCode: async () => false, verifyRecovery: async () => null, holdRecovery: async () => {} };
+  return {
+    async exchangeCode(code) {
+      const { error } = await (await supabaseForRequest(env)).auth.exchangeCodeForSession(code);
+      return !error;
+    },
+    async verifyRecovery(tokenHash) {
+      const { data, error } = await supabaseDetached(env).auth.verifyOtp({ token_hash: tokenHash, type: "recovery" });
+      if (error || !data.session) return null;
+      return { accessToken: data.session.access_token, refreshToken: data.session.refresh_token };
+    },
+    async holdRecovery(session) {
+      (await cookies()).set(RECOVERY_PENDING_COOKIE, encodeHeld(session), {
+        httpOnly: true, sameSite: "lax", secure: env.appUrl.startsWith("https://"), path: "/", maxAge: RECOVERY_PENDING_MAX_AGE,
+      });
+    },
+  };
+}
+
+async function heldRecovery(): Promise<HeldSession | null> {
+  return decodeHeld((await cookies()).get(RECOVERY_PENDING_COOKIE)?.value);
+}
+
+/** The account a held recovery link belongs to, checked with Supabase (never read from the cookie itself). */
+export async function pendingRecoveryEmail(): Promise<string | null> {
+  const env = serverEnv();
+  const held = env.backend === "memory" ? null : await heldRecovery();
+  if (!held) return null;
+  const { data, error } = await supabaseDetached(env).auth.getUser(held.accessToken);
+  return error ? null : (data.user?.email ?? null);
+}
+
+export function recoveryConfirmDeps(): RecoveryConfirmDeps {
+  const env = serverEnv();
+  return {
+    async takePending() {
+      const held = env.backend === "memory" ? null : await heldRecovery();
+      (await cookies()).delete(RECOVERY_PENDING_COOKIE);
+      return held;
+    },
+    async setSession(held) {
+      const { error } = await (await supabaseForRequest(env)).auth.setSession({ access_token: held.accessToken, refresh_token: held.refreshToken });
+      return !error;
+    },
+    async revoke(held) {
+      const { error } = await supabaseAdmin(env).auth.admin.signOut(held.accessToken, "local");
+      if (error) console.error(JSON.stringify({ msg: "recovery revoke failed", status: error.status, code: error.code }));
+    },
+  };
 }
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {

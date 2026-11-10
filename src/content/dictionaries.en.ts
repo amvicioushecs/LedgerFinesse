@@ -123,6 +123,11 @@ export const en = {
       newLabel: "New password",
       save: "Save new password",
       updateError: "We couldn't save your password. Request a new reset link and try again.",
+      confirmTitle: "Reset the password for this account?",
+      confirmBody: "This reset link is for {email}. Continue only if that is your account.",
+      confirmContinue: "Continue as {email}",
+      confirmCancel: "Not my account",
+      confirmCancelled: "No changes were made. If you didn't ask for a reset, you can ignore that email.",
     },
   },
   upload: {
