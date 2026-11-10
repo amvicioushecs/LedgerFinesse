@@ -102,4 +102,28 @@ describe.skipIf(!enabled)("Stripe test API (real gateway)", () => {
     // Expiring again is tolerated (already expired).
     await expect(gateway.expireSession(sessionId)).resolves.toBeUndefined();
   });
+
+  it("fully refunds a paid payment intent once: same key replays the same refund, a second refund is refused", { timeout: 60_000 }, async () => {
+    // A real paid test-mode PaymentIntent (test card), standing in for a mismatched Checkout payment.
+    const pi = await stripe.paymentIntents.create({
+      amount: 100, currency: "usd", payment_method: "pm_card_visa", confirm: true,
+      automatic_payment_methods: { enabled: true, allow_redirects: "never" },
+      metadata: { audit_id: auditId, user_id: userId, purpose: "ledgerfinesse integration test" },
+    });
+    expect(pi.status).toBe("succeeded");
+    expect(pi.livemode).toBe(false);
+
+    const refunds = new StripeRefundGateway(stripe);
+    const first = await refunds.refund(pi.id, `refund-${pi.id}`, "amount_mismatch");
+    expect(first.refundId).toMatch(/^re_/);
+    expect(first.amountCents).toBe(100);
+    // Redelivery retries with the same key: Stripe returns the same refund instead of a second one.
+    expect(await refunds.refund(pi.id, `refund-${pi.id}`, "amount_mismatch")).toEqual(first);
+    // Even with another key Stripe will not refund an already fully refunded charge.
+    await expect(refunds.refund(pi.id, `refund-${pi.id}-other`, "amount_mismatch")).rejects.toThrow(/refunded/i);
+
+    const stored = await stripe.refunds.retrieve(first.refundId);
+    expect(stored).toMatchObject({ payment_intent: pi.id, amount: 100, reason: "requested_by_customer", metadata: { ledgerfinesse_reason: "amount_mismatch" } });
+    expect((await stripe.refunds.list({ payment_intent: pi.id })).data).toHaveLength(1);
+  });
 });

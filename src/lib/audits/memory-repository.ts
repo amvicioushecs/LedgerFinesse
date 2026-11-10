@@ -1,16 +1,4 @@
-import type {
-  AuditRecord,
-  AuditRepository,
-  CheckoutPaidEvent,
-  CheckoutPaidOutcome,
-  DocumentRecord,
-  DocumentStore,
-  PaymentRecord,
-  PaymentReview,
-  ScanResult,
-  StoredFinding,
-  StoredLetter,
-} from "@/lib/audits/types";
+import { REFUNDABLE_REASONS, type RefundReason, type AuditRecord, type AuditRepository, type CheckoutPaidEvent, type CheckoutPaidOutcome, type DocumentRecord, type DocumentStore, type PaymentRecord, type PaymentReview, type ScanResult, type StoredFinding, type StoredLetter } from "@/lib/audits/types";
 import type { Locale } from "@/lib/i18n/locales";
 
 /**
@@ -134,8 +122,7 @@ export class MemoryAuditRepository implements AuditRepository {
     if (!payment || !audit || payment.auditId !== audit.id) {
       outcome = "unknown_session";
     } else if (payment.status === "paid" || payment.status === "refunded") {
-      if (audit.status === "unlocked") return "already_unlocked";
-      outcome = "not_unlockable";
+      return audit.status === "unlocked" && payment.status === "paid" ? "already_unlocked" : "already_recorded";
     } else {
       payment.status = "paid";
       if (audit.status === "unlocked") outcome = "duplicate_payment";
@@ -157,25 +144,38 @@ export class MemoryAuditRepository implements AuditRepository {
       amountCents: event.amountCents,
       currency: event.currency,
       refundId: null,
+      refundAmountCents: null,
+      refundedAt: null,
     });
     return outcome;
   }
 
   async hasPaidPayment(auditId: string) {
-    return [...this.payments.values()].some((p) => p.auditId === auditId && (p.status === "paid" || p.status === "refunded"));
+    return [...this.payments.values()].some((p) => p.auditId === auditId && p.status === "paid");
+  }
+
+  async hasOpenReview(auditId: string) {
+    return this.reviews.some((r) => r.auditId === auditId && r.refundId === null);
+  }
+
+  private refundable(eventId: string) {
+    return this.reviews.find((r) => r.eventId === eventId && REFUNDABLE_REASONS.has(r.reason) && r.refundId === null);
   }
 
   async findRefundDue(eventId: string) {
-    const review = this.reviews.find((r) => r.eventId === eventId && r.reason === "duplicate_payment" && r.refundId === null);
-    return review?.paymentIntentId ? { paymentIntentId: review.paymentIntentId } : null;
+    const review = this.refundable(eventId);
+    return review?.paymentIntentId
+      ? { paymentIntentId: review.paymentIntentId, reason: review.reason as RefundReason, amountCents: review.amountCents }
+      : null;
   }
 
-  async recordRefund(eventId: string, refundId: string) {
-    const review = this.reviews.find((r) => r.eventId === eventId && r.reason === "duplicate_payment" && r.refundId === null);
-    if (!review) return;
-    review.refundId = refundId;
+  async recordRefund(eventId: string, refundId: string, amountCents: number) {
+    const review = this.refundable(eventId);
+    if (!review) return false;
+    Object.assign(review, { refundId, refundAmountCents: amountCents, refundedAt: new Date().toISOString() });
     const payment = this.payments.get(review.checkoutSessionId);
     if (payment) payment.status = "refunded";
+    return true;
   }
 
   /** Test helper. */

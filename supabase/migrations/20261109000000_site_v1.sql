@@ -167,8 +167,9 @@ create table public.stripe_events (
 );
 
 -- ---------------------------------------------------------------- payment_reviews (server only)
--- A paid Checkout Session that did not unlock its audit. Admins work this queue (SQL editor / service role).
--- duplicate_payment rows are refunded automatically; the others wait for a person (refund policy: open decision).
+-- A paid Checkout Session that did not unlock its audit. Refund policy (Hector, 2026-11-10): amount_mismatch,
+-- not_unlockable and duplicate_payment are refunded in full automatically (webhook, Stripe idempotency key
+-- refund-<payment intent>); unknown_session waits for a person. Open rows (resolved_at null) are the admin queue.
 create table public.payment_reviews (
   id                   uuid primary key default gen_random_uuid(),
   event_id             text not null unique references public.stripe_events (event_id),
@@ -179,6 +180,8 @@ create table public.payment_reviews (
   amount_cents         bigint,
   currency             text,
   refund_id            text,
+  refund_amount_cents  bigint check (refund_amount_cents > 0),
+  refunded_at          timestamptz,
   resolved_at          timestamptz,
   created_at           timestamptz not null default now()
 );
@@ -186,8 +189,8 @@ create index payment_reviews_open_idx on public.payment_reviews (created_at) whe
 
 -- ---------------------------------------------------------------- unlock (service role only)
 -- One transaction: dedupe the event, record the payment as paid, check the amount against the stored fee, unlock.
--- Returns 'unlocked' | 'duplicate' | 'already_unlocked' | 'duplicate_payment' | 'amount_mismatch'
---       | 'unknown_session' | 'not_unlockable'. Every outcome after 'already_unlocked' also writes a payment_reviews row.
+-- Returns 'unlocked' | 'duplicate' | 'already_unlocked' | 'already_recorded' | 'duplicate_payment' | 'amount_mismatch'
+--       | 'unknown_session' | 'not_unlockable'. The last four write a payment_reviews row (once per session).
 create or replace function public.apply_checkout_paid(
   p_event_id text, p_event_type text, p_session_id text, p_audit_id uuid,
   p_amount_cents bigint, p_currency text, p_payment_intent_id text
@@ -210,12 +213,11 @@ begin
   if v_payment.id is null or v_audit.id is null or v_payment.audit_id is distinct from v_audit.id then
     v_outcome := 'unknown_session';
   elsif v_payment.status in ('paid', 'refunded') then
-    -- This session was already recorded (e.g. completed, then async_payment_succeeded).
-    v_outcome := case when v_audit.status = 'unlocked' then 'already_unlocked' else 'not_unlockable' end;
-    if v_outcome = 'already_unlocked' then
-      update public.stripe_events set processed_at = now(), outcome = v_outcome where event_id = p_event_id;
-      return v_outcome;
-    end if;
+    -- This session was already recorded (e.g. completed, then async_payment_succeeded). Its first event owns
+    -- any review and refund, so a later event never adds a second one.
+    v_outcome := case when v_audit.status = 'unlocked' and v_payment.status = 'paid' then 'already_unlocked' else 'already_recorded' end;
+    update public.stripe_events set processed_at = now(), outcome = v_outcome where event_id = p_event_id;
+    return v_outcome;
   else
     -- Stripe took the money: record it whatever happens next.
     update public.payments
@@ -246,21 +248,24 @@ end $$;
 revoke all on function public.apply_checkout_paid(text, text, text, uuid, bigint, text, text) from public, anon, authenticated;
 grant execute on function public.apply_checkout_paid(text, text, text, uuid, bigint, text, text) to service_role;
 
--- Records the Stripe refund for a duplicate_payment review. True when the review was open.
-create or replace function public.record_refund(p_event_id text, p_refund_id text)
+-- Records the automatic refund for a refundable review (amount_mismatch, not_unlockable, duplicate_payment).
+-- True when the review was open; false if it was already refunded or is not refundable (never refunds twice).
+-- The payment becomes 'refunded', so it no longer counts as paid; the audit itself is left as it was.
+create or replace function public.record_refund(p_event_id text, p_refund_id text, p_amount_cents bigint)
 returns boolean language plpgsql security definer set search_path = '' as $$
 declare
   v_review public.payment_reviews%rowtype;
 begin
-  update public.payment_reviews set refund_id = p_refund_id, resolved_at = now()
-    where event_id = p_event_id and reason = 'duplicate_payment' and refund_id is null
+  update public.payment_reviews
+    set refund_id = p_refund_id, refund_amount_cents = p_amount_cents, refunded_at = now(), resolved_at = now()
+    where event_id = p_event_id and reason in ('amount_mismatch', 'not_unlockable', 'duplicate_payment') and refund_id is null
     returning * into v_review;
   if v_review.id is null then return false; end if;
   update public.payments set status = 'refunded' where stripe_checkout_session_id = v_review.checkout_session_id;
   return true;
 end $$;
-revoke all on function public.record_refund(text, text) from public, anon, authenticated;
-grant execute on function public.record_refund(text, text) to service_role;
+revoke all on function public.record_refund(text, text, bigint) from public, anon, authenticated;
+grant execute on function public.record_refund(text, text, bigint) to service_role;
 
 -- ---------------------------------------------------------------- save scan (service role only)
 -- Stores the engine output in one transaction. Only a 'processing' audit can be completed, and only as

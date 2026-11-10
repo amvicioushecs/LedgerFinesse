@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { formatUsd } from "@/lib/money";
+import type { RefundReason } from "@/lib/audits/types";
 import type { CheckoutGateway, CheckoutSessionInfo, CheckoutSessionInput, RefundGateway } from "@/lib/payments/types";
 
 /** Pinned so a dashboard upgrade can't change payload shapes under us. Matches stripe@23.1.0. */
@@ -88,11 +89,16 @@ export class StripeCheckoutGateway implements CheckoutGateway {
 export class StripeRefundGateway implements RefundGateway {
   constructor(private readonly stripe: Stripe) {}
 
-  async refund(paymentIntentId: string, idempotencyKey: string): Promise<string> {
+  /** Full refund (no amount). Stripe's own reason is "duplicate" for a second charge, otherwise "requested_by_customer". */
+  async refund(paymentIntentId: string, idempotencyKey: string, reason: RefundReason) {
     const refund = await this.stripe.refunds.create(
-      { payment_intent: paymentIntentId, reason: "duplicate", metadata: { reason: "ledgerfinesse_duplicate_checkout" } },
+      {
+        payment_intent: paymentIntentId,
+        reason: reason === "duplicate_payment" ? "duplicate" : "requested_by_customer",
+        metadata: { ledgerfinesse_reason: reason },
+      },
       { idempotencyKey },
     );
-    return refund.id;
+    return { refundId: refund.id, amountCents: refund.amount };
   }
 }

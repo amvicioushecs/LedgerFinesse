@@ -136,10 +136,10 @@ describe("apply_checkout_paid", () => {
     expect(await pay("evt_6", "cs_test_a", AUDIT_A, 9600)).toBe("unlocked");
     expect(await pay("evt_7", "cs_test_a2", AUDIT_A, 9600)).toBe("duplicate_payment");
     expect(await rows("select event_id, reason from public.payment_reviews")).toEqual([{ event_id: "evt_7", reason: "duplicate_payment" }]);
-    expect(await as("service_role", null, () => rows("select public.record_refund('evt_7', 're_test_1') as ok"))).toEqual([{ ok: true }]);
+    expect(await as("service_role", null, () => rows("select public.record_refund('evt_7', 're_test_1', 9600) as ok"))).toEqual([{ ok: true }]);
     expect((await rows("select status from public.payments where stripe_checkout_session_id = 'cs_test_a2'"))[0].status).toBe("refunded");
     expect((await rows("select refund_id from public.payment_reviews where event_id = 'evt_7'"))[0].refund_id).toBe("re_test_1");
-    await expect(as("authenticated", A, () => rows("select public.record_refund('evt_7', 're_x')"))).rejects.toThrow(/permission denied/);
+    await expect(as("authenticated", A, () => rows("select public.record_refund('evt_7', 're_x', 1)"))).rejects.toThrow(/permission denied/);
   });
 
   it("never unlocks on a missing currency (NULL-safe comparisons)", async () => {
@@ -175,6 +175,50 @@ describe("apply_checkout_paid", () => {
 
   it("rejects a session that belongs to another audit", async () => {
     expect(await pay("evt_5", "cs_test_b", AUDIT_A, 1500)).toBe("unknown_session");
+  });
+});
+
+describe("refund policy (Hector, 2026-11-10)", () => {
+  const refund = (eventId: string, refundId: string, amount: number) =>
+    as("service_role", null, async () => (await rows("select public.record_refund($1, $2, $3) as ok", [eventId, refundId, amount]))[0].ok);
+  const review = async (eventId: string) =>
+    (await rows(`select reason, refund_id, refund_amount_cents, refunded_at is not null as refunded, resolved_at is not null as resolved
+      from public.payment_reviews where event_id = $1`, [eventId]))[0];
+  const paymentStatus = async (session: string) =>
+    (await rows("select status from public.payments where stripe_checkout_session_id = $1", [session]))[0].status;
+  const auditStatus = async (id: string) => (await rows("select status from public.audits where id = $1", [id]))[0].status;
+
+  it("refunds an amount mismatch: records the refund, the payment no longer counts as paid, the audit stays locked", async () => {
+    expect(await pay("evt_r1", "cs_test_a", AUDIT_A, 100)).toBe("amount_mismatch");
+    expect(await refund("evt_r1", "re_1", 100)).toBe(true);
+    expect(await review("evt_r1")).toEqual({ reason: "amount_mismatch", refund_id: "re_1", refund_amount_cents: 100, refunded: true, resolved: true });
+    expect(await paymentStatus("cs_test_a")).toBe("refunded");
+    expect(await auditStatus(AUDIT_A)).toBe("preview_ready");
+    // Never twice.
+    expect(await refund("evt_r1", "re_2", 100)).toBe(false);
+    expect((await review("evt_r1")).refund_id).toBe("re_1");
+  });
+
+  it("refunds a payment for an audit that cannot be unlocked and leaves the audit as it was, flagged", async () => {
+    await db.query(`update public.audits set status = 'failed' where id = $1`, [AUDIT_A]);
+    expect(await pay("evt_r2", "cs_test_a", AUDIT_A, 9600)).toBe("not_unlockable");
+    expect(await refund("evt_r2", "re_3", 9600)).toBe(true);
+    expect(await auditStatus(AUDIT_A)).toBe("failed");
+    expect(await review("evt_r2")).toMatchObject({ reason: "not_unlockable", refund_id: "re_3" });
+  });
+
+  it("never refunds an unknown session (manual review)", async () => {
+    expect(await pay("evt_r3", "cs_test_nope", AUDIT_A, 9600)).toBe("unknown_session");
+    expect(await refund("evt_r3", "re_4", 9600)).toBe(false);
+    expect(await review("evt_r3")).toEqual({ reason: "unknown_session", refund_id: null, refund_amount_cents: null, refunded: false, resolved: false });
+  });
+
+  it("a later event for an already-recorded session that did not unlock adds no second review (so no second refund)", async () => {
+    expect(await pay("evt_r4", "cs_test_a", AUDIT_A, 100)).toBe("amount_mismatch");
+    expect(await pay("evt_r5", "cs_test_a", AUDIT_A, 100)).toBe("already_recorded");
+    await refund("evt_r4", "re_5", 100);
+    expect(await pay("evt_r6", "cs_test_a", AUDIT_A, 100)).toBe("already_recorded");
+    expect(await rows("select event_id from public.payment_reviews")).toEqual([{ event_id: "evt_r4" }]);
   });
 });
 

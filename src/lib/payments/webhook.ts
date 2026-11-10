@@ -20,17 +20,17 @@ interface Deps {
   refunds: RefundGateway;
 }
 
-/** Paid but not unlocked: a person decides (refund policy for these is an open decision). */
-const NEEDS_REVIEW: ReadonlySet<WebhookOutcome> = new Set(["amount_mismatch", "unknown_session", "not_unlockable"]);
+/** Outcomes that may owe a refund (the repository decides per event; "duplicate" = redelivery, retry). */
+const REFUND_ON: ReadonlySet<WebhookOutcome> = new Set(["amount_mismatch", "not_unlockable", "duplicate_payment", "duplicate"]);
 
 const cryptoProvider = (stripe: Stripe) => (stripe.constructor as typeof Stripe).createSubtleCryptoProvider();
 
 /**
  * Verifies the signature on the raw body, then unlocks only for a paid session whose amount matches
  * the stored fee. Dedupe and amount checks run inside one database transaction (apply_checkout_paid),
- * which also records every paid session and flags the ones that did not unlock. A second paid session
- * for an audit that is already unlocked is refunded here; if the refund fails we return 500 and the
- * redelivered event (now a "duplicate") retries it with the same idempotency key.
+ * which also records every paid session and flags the ones that did not unlock. Mismatches, audits that
+ * can't unlock and second charges are refunded here; if the refund fails we return 500 and the redelivered
+ * event (now a "duplicate") retries it with the same idempotency key. Unknown sessions wait for a person.
  */
 export async function handleStripeWebhook(
   deps: Deps,
@@ -70,19 +70,22 @@ export async function handleStripeWebhook(
           currency: session.currency ?? "",
           paymentIntentId: typeof session.payment_intent === "string" ? session.payment_intent : (session.payment_intent?.id ?? null),
         });
-        if (outcome === "duplicate_payment" || outcome === "duplicate") {
+        // Refund policy (Hector, 2026-11-10): full automatic refund for a mismatch, an audit that can't unlock, or a
+        // second charge. A redelivered event ("duplicate") retries a refund that failed. The key is the payment
+        // intent, so neither a retry nor another event for the same payment can refund twice.
+        if (REFUND_ON.has(outcome)) {
           const due = await deps.repo.findRefundDue(event.id);
           if (due) {
-            const refundId = await deps.refunds.refund(due.paymentIntentId, `refund-${event.id}`);
-            await deps.repo.recordRefund(event.id, refundId);
-            console.warn(JSON.stringify({ msg: "duplicate checkout refunded", eventId: event.id, auditId, refundId }));
+            const refund = await deps.refunds.refund(due.paymentIntentId, `refund-${due.paymentIntentId}`, due.reason, due.amountCents);
+            await deps.repo.recordRefund(event.id, refund.refundId, refund.amountCents);
+            console.warn(JSON.stringify({ msg: "payment refunded", reason: due.reason, eventId: event.id, auditId, refundId: refund.refundId, amountCents: refund.amountCents }));
             return { status: 200, outcome: "refunded" };
           }
-          if (outcome === "duplicate_payment") {
-            console.error(JSON.stringify({ msg: "duplicate checkout without a payment intent; refund by hand", eventId: event.id, auditId }));
+          if (outcome !== "duplicate") {
+            console.error(JSON.stringify({ msg: "refundable payment has no payment intent; refund by hand", outcome, eventId: event.id, auditId }));
           }
         }
-        if (NEEDS_REVIEW.has(outcome)) {
+        if (outcome === "unknown_session") {
           console.error(JSON.stringify({ msg: "paid checkout needs review", outcome, eventId: event.id, auditId }));
         }
         return { status: 200, outcome };

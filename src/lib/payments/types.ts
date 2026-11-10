@@ -1,3 +1,4 @@
+import type { RefundReason } from "@/lib/audits/types";
 import type { Locale } from "@/lib/i18n/locales";
 
 export interface CheckoutSessionInput {
@@ -28,7 +29,10 @@ export interface CheckoutGateway {
   expireSession(id: string): Promise<void>;
 }
 
-/** Refunds a proven duplicate charge. Returns the refund id. */
+/**
+ * Fully refunds a payment intent (refund policy, Hector 2026-11-10). The caller passes the idempotency key
+ * (refund-<payment intent>), so a retry or a second event can never refund twice. paidCents is only used by the mock.
+ */
 export interface RefundGateway {
-  refund(paymentIntentId: string, idempotencyKey: string): Promise<string>;
+  refund(paymentIntentId: string, idempotencyKey: string, reason: RefundReason, paidCents?: number): Promise<{ refundId: string; amountCents: number }>;
 }

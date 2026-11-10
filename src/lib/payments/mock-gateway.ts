@@ -1,3 +1,4 @@
+import type { RefundReason } from "@/lib/audits/types";
 import Stripe from "stripe";
 import type { CheckoutGateway, CheckoutSessionInfo, CheckoutSessionInput, RefundGateway } from "@/lib/payments/types";
 
@@ -90,13 +91,13 @@ export class MockCheckoutGateway implements CheckoutGateway {
 
 /** Local refunds for the mock gateway: records them, moves no money. */
 export class MockRefundGateway implements RefundGateway {
-  readonly refunds = new Map<string, string>();
+  readonly refunds = new Map<string, { refundId: string; amountCents: number }>();
 
-  async refund(paymentIntentId: string, idempotencyKey: string): Promise<string> {
+  async refund(paymentIntentId: string, idempotencyKey: string, _reason: RefundReason, paidCents = 1) {
     const existing = this.refunds.get(idempotencyKey);
     if (existing) return existing;
-    const id = `re_mock_${paymentIntentId.slice(-12)}`;
-    this.refunds.set(idempotencyKey, id);
-    return id;
+    const refund = { refundId: `re_mock_${paymentIntentId.slice(-12)}`, amountCents: paidCents };
+    this.refunds.set(idempotencyKey, refund);
+    return refund;
   }
 }

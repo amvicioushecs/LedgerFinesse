@@ -121,6 +121,21 @@ describe("startCheckout", () => {
     expect(gateway.created).toHaveLength(0);
   });
 
+  it("opens a new checkout at the correct fee once a mismatched payment was refunded", async () => {
+    await repo.insertAudit(audit());
+    await repo.insertPayment({ auditId: "audit-1", userId: "user-a", checkoutSessionId: "cs_test_refunded", amountCents: 9600, status: "refunded" });
+    const result = await startCheckout(deps(), { userId: "user-a", email: null }, "audit-1", "en");
+    expect(result.kind).toBe("redirect");
+    expect(gateway.created[0]).toMatchObject({ amountCents: 9600, idempotencyKey: "lf-checkout-audit-1-1" });
+  });
+
+  it("holds checkout while an unknown-session payment for the audit is in manual review", async () => {
+    await repo.insertAudit(audit());
+    repo.reviews.push({ eventId: "evt_u", reason: "unknown_session", auditId: "audit-1", checkoutSessionId: "cs_x", paymentIntentId: "pi_x",
+      amountCents: 9600, currency: "usd", refundId: null, refundAmountCents: null, refundedAt: null });
+    expect(await startCheckout(deps(), { userId: "user-a", email: null }, "audit-1", "en")).toEqual({ kind: "no_checkout", reason: "under_review" });
+  });
+
   it("does not open checkout for clean, unlocked, foreign or tampered audits", async () => {
     await repo.insertAudit(audit({ id: "clean", status: "clean", totalOwedCents: 0, feeCents: 0 }));
     await repo.insertAudit(audit({ id: "done", status: "unlocked", unlockedAt: "2026-11-09T00:00:00Z" }));

@@ -83,6 +83,8 @@ export type CheckoutPaidOutcome =
   | "unlocked"
   | "duplicate"
   | "already_unlocked"
+  /** A later event for a session already recorded as paid or refunded that did not unlock: its first event owns any refund. */
+  | "already_recorded"
   | "duplicate_payment"
   | "amount_mismatch"
   | "unknown_session"
@@ -91,14 +93,20 @@ export type CheckoutPaidOutcome =
 /** A paid session that did not unlock its audit (server-only `payment_reviews`). */
 export interface PaymentReview {
   eventId: string;
-  reason: Exclude<CheckoutPaidOutcome, "unlocked" | "duplicate" | "already_unlocked">;
+  reason: "amount_mismatch" | "not_unlockable" | "duplicate_payment" | "unknown_session";
   auditId: string | null;
   checkoutSessionId: string;
   paymentIntentId: string | null;
   amountCents: number;
   currency: string;
   refundId: string | null;
+  refundAmountCents: number | null;
+  refundedAt: string | null;
 }
+
+/** Refunded automatically and in full (Hector, 2026-11-10). unknown_session stays with a person. */
+export type RefundReason = "amount_mismatch" | "not_unlockable" | "duplicate_payment";
+export const REFUNDABLE_REASONS: ReadonlySet<string> = new Set<RefundReason>(["amount_mismatch", "not_unlockable", "duplicate_payment"]);
 
 export interface CheckoutPaidEvent {
   eventId: string;
@@ -139,11 +147,14 @@ export interface AuditRepository {
   setPaymentStatus(checkoutSessionId: string, status: PaymentRecord["status"]): Promise<void>;
   /** Records the payment as paid whenever Stripe took money; flags anything that did not unlock. */
   applyCheckoutPaid(event: CheckoutPaidEvent): Promise<CheckoutPaidOutcome>;
-  /** True once any checkout for the audit was paid (unlocked or under review): never open another. */
+  /** True while a checkout for the audit is paid and not refunded (unlocked, or a refund still pending). */
   hasPaidPayment(auditId: string): Promise<boolean>;
-  /** The duplicate charge from this event still waiting for its refund, if any. */
-  findRefundDue(eventId: string): Promise<{ paymentIntentId: string } | null>;
-  recordRefund(eventId: string, refundId: string): Promise<void>;
+  /** True while a payment review for the audit is open: unknown_session, or a refund waiting for its retry. */
+  hasOpenReview(auditId: string): Promise<boolean>;
+  /** The refundable payment from this event still waiting for its refund, if any. */
+  findRefundDue(eventId: string): Promise<{ paymentIntentId: string; reason: RefundReason; amountCents: number } | null>;
+  /** Records the refund once; false when it was already recorded or the review is not refundable. */
+  recordRefund(eventId: string, refundId: string, amountCents: number): Promise<boolean>;
 }
 
 export interface DocumentStore {

@@ -27,17 +27,17 @@ function event(type: string, session: Record<string, unknown>, id = "evt_1") {
 const signed = (payload: string, secret = SECRET) => ({ rawBody: payload, signature: stripe.webhooks.generateTestHeaderString({ payload, secret }) });
 
 let repo: MemoryAuditRepository;
-let refunds: { calls: { paymentIntentId: string; idempotencyKey: string }[]; fail: boolean; refund: RefundGateway["refund"] };
+let refunds: { calls: { paymentIntentId: string; idempotencyKey: string; reason: string }[]; fail: boolean; refund: RefundGateway["refund"] };
 const run = (req: { rawBody: string; signature: string | null }) => handleStripeWebhook({ stripe, webhookSecret: SECRET, repo, refunds }, req);
 
 beforeEach(async () => {
   refunds = {
     calls: [],
     fail: false,
-    async refund(paymentIntentId, idempotencyKey) {
-      this.calls.push({ paymentIntentId, idempotencyKey });
+    async refund(paymentIntentId, idempotencyKey, reason) {
+      this.calls.push({ paymentIntentId, idempotencyKey, reason });
       if (this.fail) throw new Error("stripe down");
-      return `re_${this.calls.length}`;
+      return { refundId: `re_${this.calls.length}`, amountCents: 9600 };
     },
   };
   repo = new MemoryAuditRepository();
@@ -71,21 +71,24 @@ describe("handleStripeWebhook", () => {
     expect(await run(signed(event("checkout.session.async_payment_succeeded", {})))).toEqual({ status: 200, outcome: "unlocked" });
   });
 
-  it("refuses an amount that does not match the stored fee, but records the payment and flags it (no auto-refund)", async () => {
-    expect(await run(signed(event("checkout.session.completed", { amount_total: 100 })))).toEqual({ status: 200, outcome: "amount_mismatch" });
+  it("refunds an amount that does not match the stored fee in full, keyed on the payment intent; the audit stays locked", async () => {
+    expect(await run(signed(event("checkout.session.completed", { amount_total: 100 })))).toEqual({ status: 200, outcome: "refunded" });
+    expect(refunds.calls).toEqual([{ paymentIntentId: "pi_1", idempotencyKey: "refund-pi_1", reason: "amount_mismatch" }]);
     expect(await status()).toBe("preview_ready");
-    expect(repo.paymentStatus("cs_test_1")).toBe("paid");
+    expect(repo.paymentStatus("cs_test_1")).toBe("refunded");
+    expect(await repo.hasPaidPayment(AUDIT_1)).toBe(false);
     expect(repo.reviews).toEqual([
-      expect.objectContaining({ eventId: "evt_1", reason: "amount_mismatch", checkoutSessionId: "cs_test_1", amountCents: 100, paymentIntentId: "pi_1", refundId: null }),
+      expect.objectContaining({ eventId: "evt_1", reason: "amount_mismatch", checkoutSessionId: "cs_test_1", amountCents: 100, paymentIntentId: "pi_1", refundId: "re_1", refundAmountCents: 9600 }),
     ]);
-    expect(refunds.calls).toHaveLength(0);
+    expect(repo.reviews[0].refundedAt).toEqual(expect.any(String));
   });
 
-  it("checks the amount against the stored minimum fee: 15% of $3.00 (45 cents) is a mismatch, 50 cents unlocks", async () => {
+  it("checks the amount against the stored minimum fee: 15% of $3.00 (45 cents) is a mismatch (refunded), 50 cents unlocks", async () => {
     repo = new MemoryAuditRepository();
     await repo.insertAudit({ ...audit, totalOwedCents: 300, feeCents: 50 });
     await repo.insertPayment({ auditId: AUDIT_1, userId: "user-a", checkoutSessionId: "cs_test_1", amountCents: 50, status: "pending" });
-    expect(await run(signed(event("checkout.session.completed", { amount_total: 45 })))).toEqual({ status: 200, outcome: "amount_mismatch" });
+    expect(await run(signed(event("checkout.session.completed", { amount_total: 45 })))).toEqual({ status: 200, outcome: "refunded" });
+    expect(repo.reviews[0]).toMatchObject({ reason: "amount_mismatch", amountCents: 45 });
     expect(await status()).toBe("preview_ready");
 
     repo = new MemoryAuditRepository();
@@ -101,37 +104,52 @@ describe("handleStripeWebhook", () => {
     expect(refunds.calls).toHaveLength(0);
   });
 
-  it("refunds a second paid session for an audit that is already unlocked, once per event", async () => {
+  it("refunds a second paid session for an audit that is already unlocked, once", async () => {
     await run(signed(event("checkout.session.completed", {})));
     await repo.insertPayment({ auditId: AUDIT_1, userId: "user-a", checkoutSessionId: "cs_test_2", amountCents: 9600, status: "pending" });
     const second = signed(event("checkout.session.completed", { id: "cs_test_2", payment_intent: "pi_2" }, "evt_2"));
     expect(await run(second)).toEqual({ status: 200, outcome: "refunded" });
-    expect(refunds.calls).toEqual([{ paymentIntentId: "pi_2", idempotencyKey: "refund-evt_2" }]);
+    expect(refunds.calls).toEqual([{ paymentIntentId: "pi_2", idempotencyKey: "refund-pi_2", reason: "duplicate_payment" }]);
     expect(repo.paymentStatus("cs_test_2")).toBe("refunded");
+    expect(await status()).toBe("unlocked");
     expect(repo.reviews).toEqual([expect.objectContaining({ eventId: "evt_2", reason: "duplicate_payment", refundId: "re_1" })]);
     expect(await run(second)).toEqual({ status: 200, outcome: "duplicate" });
+    expect(await run(signed(event("checkout.session.async_payment_succeeded", { id: "cs_test_2", payment_intent: "pi_2" }, "evt_2b")))).toEqual({ status: 200, outcome: "already_recorded" });
     expect(refunds.calls).toHaveLength(1);
   });
 
-  it("retries a failed duplicate-charge refund when Stripe redelivers the event", async () => {
-    await run(signed(event("checkout.session.completed", {})));
-    await repo.insertPayment({ auditId: AUDIT_1, userId: "user-a", checkoutSessionId: "cs_test_2", amountCents: 9600, status: "pending" });
-    const second = signed(event("checkout.session.completed", { id: "cs_test_2", payment_intent: "pi_2" }, "evt_2"));
+  it("retries a failed refund on redelivery with the same key, and never refunds twice", async () => {
+    const req = signed(event("checkout.session.completed", { amount_total: 100 }));
     refunds.fail = true;
-    expect(await run(second)).toEqual({ status: 500, outcome: "error" });
+    expect(await run(req)).toEqual({ status: 500, outcome: "error" });
+    expect(await repo.hasPaidPayment(AUDIT_1)).toBe(true); // refund pending: still blocks a new checkout
     refunds.fail = false;
-    expect(await run(second)).toEqual({ status: 200, outcome: "refunded" });
-    expect(refunds.calls.map((c) => c.idempotencyKey)).toEqual(["refund-evt_2", "refund-evt_2"]);
+    expect(await run(req)).toEqual({ status: 200, outcome: "refunded" });
+    expect(await run(req)).toEqual({ status: 200, outcome: "duplicate" });
+    expect(refunds.calls.map((c) => c.idempotencyKey)).toEqual(["refund-pi_1", "refund-pi_1"]);
   });
 
-  it("records and flags a payment for an audit that cannot be unlocked or a session we never created", async () => {
+  it("refunds a payment for an audit that cannot be unlocked and leaves the audit as it was", async () => {
     await repo.insertAudit({ ...audit, id: AUDIT_2, status: "failed" });
     await repo.insertPayment({ auditId: AUDIT_2, userId: "user-a", checkoutSessionId: "cs_test_3", amountCents: 9600, status: "pending" });
-    expect(await run(signed(event("checkout.session.completed", { id: "cs_test_3", metadata: { audit_id: AUDIT_2 } }, "evt_3")))).toEqual({ status: 200, outcome: "not_unlockable" });
-    expect(repo.paymentStatus("cs_test_3")).toBe("paid");
+    expect(await run(signed(event("checkout.session.completed", { id: "cs_test_3", payment_intent: "pi_3", metadata: { audit_id: AUDIT_2 } }, "evt_3"))))
+      .toEqual({ status: 200, outcome: "refunded" });
+    expect(refunds.calls).toEqual([{ paymentIntentId: "pi_3", idempotencyKey: "refund-pi_3", reason: "not_unlockable" }]);
+    expect((await repo.findAudit("user-a", AUDIT_2))?.status).toBe("failed");
+    expect(repo.reviews).toEqual([expect.objectContaining({ reason: "not_unlockable", refundId: "re_1" })]);
+  });
+
+  it("keeps an unknown session in manual review: no refund", async () => {
     expect(await run(signed(event("checkout.session.completed", { id: "cs_test_unknown" }, "evt_4")))).toEqual({ status: 200, outcome: "unknown_session" });
-    expect(repo.reviews.map((r) => [r.eventId, r.reason])).toEqual([["evt_3", "not_unlockable"], ["evt_4", "unknown_session"]]);
+    expect(repo.reviews).toEqual([expect.objectContaining({ eventId: "evt_4", reason: "unknown_session", refundId: null })]);
+    expect(await repo.hasOpenReview(AUDIT_1)).toBe(true);
     expect(refunds.calls).toHaveLength(0);
+  });
+
+  it("cannot refund without a payment intent: logged for a person, left open", async () => {
+    expect(await run(signed(event("checkout.session.completed", { amount_total: 100, payment_intent: null })))).toEqual({ status: 200, outcome: "amount_mismatch" });
+    expect(refunds.calls).toHaveLength(0);
+    expect(await repo.hasOpenReview(AUDIT_1)).toBe(true);
   });
 
   it("dedupes replays of the same event id", async () => {

@@ -193,3 +193,25 @@ describe("after a verified payment", () => {
     expect(await getUnlockedReport(deps, OTHER, audit.id, "en")).toBeNull();
   });
 });
+
+describe("payment under review (refund policy)", () => {
+  it("only while a payment is paid-not-refunded or an unknown-session review is open; a refunded payment unlocks checkout again", async () => {
+    const repo = deps.repo as MemoryAuditRepository;
+    const audit = await readyAudit();
+    await scanAudit(deps, USER, audit.id);
+    const review = async () => (await getFreeResult(deps, USER, audit.id))?.paymentUnderReview;
+    expect(await review()).toBe(false);
+
+    await repo.insertPayment({ auditId: audit.id, userId: USER, checkoutSessionId: "cs_1", amountCents: 9600, status: "pending" });
+    expect(await repo.applyCheckoutPaid({ eventId: "evt_1", eventType: "checkout.session.completed", checkoutSessionId: "cs_1", auditId: audit.id,
+      amountCents: 100, currency: "usd", paymentIntentId: "pi_1" })).toBe("amount_mismatch");
+    expect(await review()).toBe(true); // refund not recorded yet (e.g. Stripe call failed, waiting for redelivery)
+    expect(await repo.recordRefund("evt_1", "re_1", 100)).toBe(true);
+    expect(await review()).toBe(false);
+    expect(await repo.recordRefund("evt_1", "re_2", 100)).toBe(false);
+
+    expect(await repo.applyCheckoutPaid({ eventId: "evt_2", eventType: "checkout.session.completed", checkoutSessionId: "cs_unknown", auditId: audit.id,
+      amountCents: 9600, currency: "usd", paymentIntentId: "pi_2" })).toBe("unknown_session");
+    expect(await review()).toBe(true);
+  });
+});

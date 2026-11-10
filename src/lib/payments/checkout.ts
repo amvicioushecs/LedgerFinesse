@@ -36,8 +36,11 @@ export async function startCheckout(
     throw new Error(`stored fee for audit ${auditId} does not match the fee policy for its total`);
   }
 
-  // Paid but not unlocked means a payment is under review; a second checkout would charge twice.
-  if (await deps.repo.hasPaidPayment(auditId)) return { kind: "no_checkout", reason: "under_review" };
+  // Paid and not refunded (a refund is pending its retry), or an unknown-session payment in manual review:
+  // a second checkout could charge twice. A refunded payment no longer counts, so the renter can pay again.
+  if ((await deps.repo.hasPaidPayment(auditId)) || (await deps.repo.hasOpenReview(auditId))) {
+    return { kind: "no_checkout", reason: "under_review" };
+  }
 
   const pending = await deps.repo.findPendingPayment(auditId);
   if (pending) {

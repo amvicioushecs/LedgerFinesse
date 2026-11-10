@@ -214,7 +214,7 @@ export interface FreeResult {
   audit: AuditRecord;
   summary: FreeSummary | null;
   decision: UnlockDecision | null;
-  /** Stripe took a payment that did not unlock the audit; it is in the admin review queue. */
+  /** A payment for this locked audit is unknown_session (manual review) or its automatic refund is waiting for a retry. */
   paymentUnderReview: boolean;
 }
 
@@ -228,7 +228,8 @@ export async function getFreeResult(deps: AuditDeps, userId: string, auditId: st
     audit,
     summary: { itemCount: audit.itemCount, totalOwedCents: audit.totalOwedCents, linesScanned: audit.linesScanned ?? 0 },
     decision: unlockDecision(audit.totalOwedCents),
-    paymentUnderReview: audit.status === "preview_ready" && (await deps.repo.hasPaidPayment(auditId)),
+    paymentUnderReview:
+      audit.status === "preview_ready" && ((await deps.repo.hasPaidPayment(auditId)) || (await deps.repo.hasOpenReview(auditId))),
   };
 }
 

@@ -4,6 +4,7 @@ import type {
   AuditRepository,
   CheckoutPaidEvent,
   CheckoutPaidOutcome,
+  RefundReason,
   DocumentRecord,
   DocumentStore,
   PaymentRecord,
@@ -11,6 +12,7 @@ import type {
   StoredFinding,
   StoredLetter,
 } from "@/lib/audits/types";
+import { REFUNDABLE_REASONS } from "@/lib/audits/types";
 import type { Locale } from "@/lib/i18n/locales";
 import type { AllowedMime } from "@/lib/uploads";
 
@@ -285,8 +287,18 @@ export class SupabaseAuditRepository implements AuditRepository {
       .from("payments")
       .select("id", { count: "exact", head: true })
       .eq("audit_id", auditId)
-      .in("status", ["paid", "refunded"]);
+      .eq("status", "paid");
     if (error) throw new Error(`has paid payment: ${error.message}`);
+    return (count ?? 0) > 0;
+  }
+
+  async hasOpenReview(auditId: string) {
+    const { count, error } = await this.admin
+      .from("payment_reviews")
+      .select("id", { count: "exact", head: true })
+      .eq("audit_id", auditId)
+      .is("refund_id", null);
+    if (error) throw new Error(`has open review: ${error.message}`);
     return (count ?? 0) > 0;
   }
 
@@ -294,18 +306,23 @@ export class SupabaseAuditRepository implements AuditRepository {
     const data = check(
       await this.admin
         .from("payment_reviews")
-        .select("payment_intent_id")
+        .select("payment_intent_id, reason, amount_cents")
         .eq("event_id", eventId)
-        .eq("reason", "duplicate_payment")
+        .in("reason", [...REFUNDABLE_REASONS])
         .is("refund_id", null)
         .maybeSingle(),
       "find refund due",
-    ) as { payment_intent_id: string | null } | null;
-    return data?.payment_intent_id ? { paymentIntentId: data.payment_intent_id } : null;
+    ) as { payment_intent_id: string | null; reason: RefundReason; amount_cents: number | string | null } | null;
+    return data?.payment_intent_id
+      ? { paymentIntentId: data.payment_intent_id, reason: data.reason, amountCents: Number(data.amount_cents ?? 0) }
+      : null;
   }
 
-  async recordRefund(eventId: string, refundId: string) {
-    check(await this.admin.rpc("record_refund", { p_event_id: eventId, p_refund_id: refundId }), "record refund");
+  async recordRefund(eventId: string, refundId: string, amountCents: number) {
+    return check(
+      await this.admin.rpc("record_refund", { p_event_id: eventId, p_refund_id: refundId, p_amount_cents: amountCents }),
+      "record refund",
+    ) as boolean;
   }
 }
 

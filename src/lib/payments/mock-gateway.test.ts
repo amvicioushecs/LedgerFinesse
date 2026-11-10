@@ -29,7 +29,7 @@ describe("mock checkout end to end", () => {
 
   it("mock refunds are idempotent per key and an expired mock session cannot be paid", async () => {
     const refunds = new MockRefundGateway();
-    expect(await refunds.refund("pi_mock_abc", "refund-evt_1")).toBe(await refunds.refund("pi_mock_abc", "refund-evt_1"));
+    expect(await refunds.refund("pi_mock_abc", "refund-pi_mock_abc", "duplicate_payment")).toEqual(await refunds.refund("pi_mock_abc", "refund-pi_mock_abc", "duplicate_payment"));
     expect(refunds.refunds.size).toBe(1);
     const gateway = new MockCheckoutGateway("http://localhost:3000");
     const s = await gateway.createSession({ auditId: A1, userId: "u1", amountCents: 9600, totalOwedCents: 64000, minimumFeeApplied: false, locale: "en", customerEmail: null, successUrl: "s", cancelUrl: "c", idempotencyKey: "k" });
