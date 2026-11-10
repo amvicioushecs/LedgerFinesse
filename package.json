@@ -7,6 +7,8 @@
   },
   "scripts": {
     "dev": "next dev",
+    "blog:build": "tsx scripts/build-blog.ts",
+    "prebuild": "npm run blog:build",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -14,8 +16,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "build:cf": "opennextjs-cloudflare build",
-    "preview:cf": "opennextjs-cloudflare build && opennextjs-cloudflare preview"
+    "build:cf": "npm run blog:build && opennextjs-cloudflare build",
+    "preview:cf": "npm run build:cf && opennextjs-cloudflare preview"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "1.20.13",
