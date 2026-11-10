@@ -151,8 +151,8 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 }
 
 /**
- * Whether this session may set a new password: a recovery session (reset link) or a recent sign-in, from the
- * verified JWT's `amr` claim (dev sessions carry a signed sign-in time).
+ * Whether this session may set a new password: a sign-in (including recovery) within the recent window, from the
+ * verified JWT's `amr` claim timestamps (dev sessions carry a signed sign-in time).
  */
 export async function passwordChangeAllowed(): Promise<boolean> {
   const env = serverEnv();
@@ -165,8 +165,7 @@ export async function passwordChangeAllowed(): Promise<boolean> {
     const { data, error } = await (await supabaseForRequest(env)).auth.getClaims();
     const amr = error ? [] : ((data?.claims.amr ?? []) as unknown[]);
     methods = amr.flatMap((m) =>
-      typeof m === "object" && m && "method" in m && "timestamp" in m ? [{ method: String(m.method), at: Number(m.timestamp) }]
-      : m === "recovery" ? [{ method: "recovery", at: 0 }] : []);
+      typeof m === "object" && m && "method" in m && "timestamp" in m ? [{ method: String(m.method), at: Number(m.timestamp) }] : []);
   }
   return mayChangePassword(methods, now, env.passwordChangeRecentSeconds);
 }
