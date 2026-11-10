@@ -37,7 +37,7 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
   const deps = await auditDeps();
   const free = await getFreeResult(deps, user.id, id);
   if (!free) notFound();
-  const { audit, summary, decision, paymentUnderReview } = free;
+  const { audit, summary, decision, paymentUnderReview, refundPending } = free;
   const caseId = audit.id.slice(0, 8).toUpperCase();
 
   if (audit.status === "unlocked") {
@@ -103,11 +103,21 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
   const net = formatUsd(summary.totalOwedCents - decision.feeCents);
   const checkout = typeof query.checkout === "string" ? query.checkout : null;
 
-  if (paymentUnderReview) {
+  if (paymentUnderReview || refundPending) {
     return (
       <Shell>
-        <h1 className="font-display text-3xl font-bold" data-testid="payment-review">{r.reviewTitle}</h1>
-        <p className="mt-2 text-muted">{r.reviewBody}</p>
+        {paymentUnderReview ? (
+          <>
+            <h1 className="font-display text-3xl font-bold" data-testid="payment-review">{r.reviewTitle}</h1>
+            <p className="mt-2 text-muted">{r.reviewBody}</p>
+          </>
+        ) : null}
+        {refundPending ? (
+          <>
+            <h1 className="font-display text-3xl font-bold" data-testid="payment-refund-pending">{r.refundPendingTitle}</h1>
+            <p className="mt-2 text-muted">{r.refundPendingBody}</p>
+          </>
+        ) : null}
       </Shell>
     );
   }
@@ -148,6 +158,9 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
       <section className="mt-6 rounded-lg border-2 border-forest p-6" data-testid="fee-gate">
         <h2 className="font-display text-2xl font-bold">{decision.minimumApplied ? fill(r.feeTitleMinimum, { fee }) : r.feeTitle}</h2>
         <p className="mt-2" data-testid="fee-line">{fill(decision.minimumApplied ? r.feeLineMinimum : r.feeLine, { fee, total })}</p>
+        {decision.minimumApplied ? (
+          <p role="note" className="mt-3 rounded-md border-2 border-gold bg-butter p-3 text-sm font-semibold" data-testid="fee-minimum-note">{r.feeMinimumNote}</p>
+        ) : null}
         <p className="mt-1 text-sm text-muted">{fill(r.keep, { net, total })}</p>
         <form action="/api/checkout" method="post" className="mt-5">
           <input type="hidden" name="auditId" value={audit.id} />

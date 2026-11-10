@@ -26,7 +26,8 @@ async function SignInForm({ locale, searchParams }: { locale: Locale; searchPara
   }
   const p = t.signup.password;
   const passwordStatus: Record<string, string> = {
-    invalid: p.invalid, locked: p.locked, reauth: p.reauth, unconfirmed: p.unconfirmed, weak: p.weak, confirm: p.confirmSent, reset_sent: p.resetSent, expired: p.expired, recovery_cancelled: p.confirmCancelled,
+    invalid: p.invalid, locked: p.locked, reauth: p.reauth, unconfirmed: p.unconfirmed, weak: fill(p.weak, { min: PASSWORD_MIN_LENGTH }), confirm: p.confirmSent,
+    reset_sent: p.resetSent, expired: p.expired, recovery_cancelled: p.confirmCancelled,
   };
   const inputClass = "mt-1 block w-full rounded-md border border-line px-3 py-3 text-base";
   return (

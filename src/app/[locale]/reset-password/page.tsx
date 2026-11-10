@@ -30,7 +30,7 @@ async function ResetForm({ locale, searchParams }: { locale: Locale; searchParam
       </label>
       {status === "weak" || status === "rate" || status === "unavailable" || status === "error" ? (
         <p role="alert" className="text-sm font-semibold text-alert" data-testid="password-status">
-          {status === "weak" ? p.weak : status === "rate" ? getDictionary(locale).signup.rateLimited
+          {status === "weak" ? fill(p.weak, { min: PASSWORD_MIN_LENGTH }) : status === "rate" ? getDictionary(locale).signup.rateLimited
             : status === "unavailable" ? getDictionary(locale).common.unavailable : p.updateError}
         </p>
       ) : null}

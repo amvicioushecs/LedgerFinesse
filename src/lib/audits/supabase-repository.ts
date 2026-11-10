@@ -319,6 +319,28 @@ export class SupabaseAuditRepository implements AuditRepository {
     return (count ?? 0) > 0;
   }
 
+  async hasUnknownSessionReview(auditId: string) {
+    const { count, error } = await this.admin
+      .from("payment_reviews")
+      .select("id", { count: "exact", head: true })
+      .eq("audit_id", auditId)
+      .eq("reason", "unknown_session")
+      .is("refund_id", null);
+    if (error) throw new Error(`has unknown session review: ${error.message}`);
+    return (count ?? 0) > 0;
+  }
+
+  async hasPendingRefund(auditId: string) {
+    const { count, error } = await this.admin
+      .from("payment_reviews")
+      .select("id", { count: "exact", head: true })
+      .eq("audit_id", auditId)
+      .in("reason", [...REFUNDABLE_REASONS])
+      .is("refund_id", null);
+    if (error) throw new Error(`has pending refund: ${error.message}`);
+    return (count ?? 0) > 0;
+  }
+
   async findRefundDue(eventId: string) {
     const data = check(
       await this.admin

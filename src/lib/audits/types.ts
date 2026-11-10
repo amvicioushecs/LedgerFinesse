@@ -155,6 +155,10 @@ export interface AuditRepository {
   hasPaidPayment(auditId: string): Promise<boolean>;
   /** True while a payment review for the audit is open: unknown_session, or a refund waiting for its retry. */
   hasOpenReview(auditId: string): Promise<boolean>;
+  /** True while an unrecognized checkout for this audit is in manual review. */
+  hasUnknownSessionReview(auditId: string): Promise<boolean>;
+  /** True while an automatic refund for this audit is waiting to be recorded (retry). */
+  hasPendingRefund(auditId: string): Promise<boolean>;
   /** The refundable payment from this event still waiting for its refund, if any. */
   findRefundDue(eventId: string): Promise<{ paymentIntentId: string; reason: RefundReason; amountCents: number } | null>;
   /** Records the refund once; false when it was already recorded or the review is not refundable. */
