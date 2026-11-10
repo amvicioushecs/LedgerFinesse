@@ -1,3 +1,5 @@
+import { isIP } from "node:net";
+
 /**
  * Fixed-window request limits. The hard limit is per user (or per sign-in email): LF_RATE_LIMIT_<ACTION>. A loose
  * per-IP limit (LF_RATE_LIMIT_IP, default 100/60) applies only when LF_TRUSTED_IP_HEADER names a header the host
@@ -90,7 +92,9 @@ export class MemoryRateLimitStore implements RateLimitStore {
  * Per-email wrong-password limit, separate from the sign-in request limit. A failure is reserved atomically
  * BEFORE the attempt (so parallel guesses can't all pass a read-then-write check) and forgiven afterwards unless
  * the password was wrong, so only wrong passwords count. A reservation and its forgive can fall in different
- * windows at a boundary; the forgive then does nothing, which errs toward counting.
+ * windows at a boundary; the forgive then does nothing, which errs toward counting. Anyone who can submit a
+ * password for an email can pause password sign-in for that address for the window (default 15 minutes);
+ * magic-link sign-in and password reset still work.
  */
 export function passwordFailureGuard(deps: { store: RateLimitStore; limit: RateLimit; failOpen: boolean }) {
   const key = (email: string) => [`password_fail:subject:${email}`];
@@ -114,18 +118,18 @@ export function passwordFailureGuard(deps: { store: RateLimitStore; limit: RateL
   };
 }
 
-const IP = /^[0-9A-Fa-f:.]{2,45}$/;
-
 /**
  * The caller's IP from the one header we are configured to trust (LF_TRUSTED_IP_HEADER), else null (per-IP off).
- * For x-forwarded-for only the rightmost hop counts (appended by the nearest proxy); the leftmost is whatever the
- * client sent. Before trusting any header on Spacefast, run a header-echo test on a preview from two networks and
- * confirm the platform overwrites (not passes through) a client-sent value.
+ * For x-forwarded-for only the rightmost hop counts, and only when exactly one proxy appends a hop; with more
+ * hops the rightmost is the last untrusted proxy, not the platform. The leftmost is whatever the client sent.
+ * Don't set LF_TRUSTED_IP_HEADER until a Spacefast preview header-echo test with forged values (client-sent
+ * cf-connecting-ip / x-forwarded-for / x-real-ip) from two networks proves the platform overwrites the header
+ * and, for x-forwarded-for, that exactly one hop is appended.
  */
 export function clientIp(headers: Headers, trustedHeader: string | null): string | null {
   if (!trustedHeader) return null;
   const raw = headers.get(trustedHeader);
   if (!raw) return null;
   const value = (trustedHeader === "x-forwarded-for" ? raw.split(",").at(-1) : raw)?.trim() ?? "";
-  return IP.test(value) ? value : null;
+  return isIP(value) ? value : null;
 }
