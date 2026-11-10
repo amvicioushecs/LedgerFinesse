@@ -258,14 +258,23 @@ revoke all on function public.record_refund(text, text) from public, anon, authe
 grant execute on function public.record_refund(text, text) to service_role;
 
 -- ---------------------------------------------------------------- save scan (service role only)
--- Stores the engine output in one transaction. Only a 'processing' audit can be completed.
+-- Stores the engine output in one transaction. Only a 'processing' audit can be completed, and only as
+-- preview_ready (a fee to pay), clean, or unlocked with a waived $0 fee. Paid unlocks go through apply_checkout_paid.
 create or replace function public.save_scan_result(p_audit_id uuid, p_result jsonb)
 returns void language plpgsql security definer set search_path = '' as $$
 declare
-  v_user uuid;
+  v_user   uuid;
+  v_status text := p_result ->> 'status';
+  v_fee    bigint := (p_result ->> 'feeCents')::bigint;
 begin
   select user_id into v_user from public.audits where id = p_audit_id and status = 'processing' for update;
   if v_user is null then raise exception 'audit % is not processing', p_audit_id; end if;
+  if v_status is null
+     or v_status not in ('preview_ready', 'clean', 'unlocked')
+     or (v_status = 'unlocked' and v_fee is distinct from 0)
+     or (v_status = 'preview_ready' and (v_fee is null or v_fee < 50)) then
+    raise exception 'scan may not finish as % with fee %', coalesce(v_status, 'null'), coalesce(v_fee::text, 'null');
+  end if;
 
   insert into public.extractions (audit_id, user_id, source, data)
   values (p_audit_id, v_user, p_result #>> '{extraction,source}', p_result #> '{extraction,data}');

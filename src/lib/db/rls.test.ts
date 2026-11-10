@@ -201,6 +201,23 @@ describe("save_scan_result", () => {
     expect(await rows("select * from public.findings where audit_id = $1", [AUDIT_C])).toEqual([]);
   });
 
+  it("only finishes a scan as preview_ready, clean, or unlocked with a waived ($0) fee", async () => {
+    const save = (overrides: Record<string, unknown>) =>
+      as("service_role", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result(overrides)]));
+    await expect(save({ status: "unlocked", unlockedAt: "2026-11-09T00:00:00Z" })).rejects.toThrow(/may not finish as unlocked/);
+    for (const status of ["draft", "processing", "failed"]) {
+      await expect(save({ status })).rejects.toThrow(/may not finish as/);
+    }
+    await expect(save({ status: "preview_ready", totalOwedCents: 300, feeCents: 0 })).rejects.toThrow(/may not finish as preview_ready/);
+    expect((await rows("select status from public.audits where id = $1", [AUDIT_C]))[0].status).toBe("processing");
+
+    const waived = { status: "unlocked", unlockedAt: "2026-11-09T00:00:00Z", totalOwedCents: 300, feeCents: 0,
+      findings: [{ position: 0, category: "unauthorized_fee", description: "Mystery", firstDate: "2026-02-01", lastDate: "2026-02-01",
+        lineNumbers: [1], chargedCents: 300, allowedCents: 0, owedCents: 300, basis: "lease", citation: null, sourceUrl: null, leaseRef: null, lawNotes: [] }] };
+    await save(waived);
+    expect((await rows("select status, fee_cents from public.audits where id = $1", [AUDIT_C]))[0]).toEqual({ status: "unlocked", fee_cents: 0 });
+  });
+
   it("refuses an audit that is not processing, and renters cannot call it", async () => {
     await expect(as("service_role", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_A, result()]))).rejects.toThrow(/not processing/);
     await expect(as("authenticated", A, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result()]))).rejects.toThrow(/permission denied/);
