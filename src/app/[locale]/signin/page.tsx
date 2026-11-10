@@ -5,12 +5,15 @@ import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/lib/auth/password";
 import { safeNextPath } from "@/lib/auth/safe-next";
 import { currentLocale } from "@/lib/i18n/server";
 import type { Locale } from "@/lib/i18n/locales";
+import { pendingCode } from "@/lib/server/runtime";
 import { PRIVATE_ROBOTS } from "@/lib/seo";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = getDictionary(await currentLocale());
   return { title: t.signup.title, robots: PRIVATE_ROBOTS };
 }
+
+const OK_STATUSES = new Set(["confirm", "reset_sent", "recovery_cancelled", "password_reset"]);
 
 async function SignInForm({ locale, searchParams }: { locale: Locale; searchParams: PageProps<"/[locale]/signin">["searchParams"] }) {
   const t = getDictionary(locale);
@@ -27,11 +30,27 @@ async function SignInForm({ locale, searchParams }: { locale: Locale; searchPara
   const p = t.signup.password;
   const passwordStatus: Record<string, string> = {
     invalid: p.invalid, locked: p.locked, reauth: p.reauth, unconfirmed: p.unconfirmed, weak: fill(p.weak, { min: PASSWORD_MIN_LENGTH }), confirm: p.confirmSent,
-    reset_sent: p.resetSent, expired: p.expired, recovery_cancelled: p.confirmCancelled,
+    reset_sent: p.resetSent, expired: p.expired, recovery_cancelled: p.confirmCancelled, leaked: p.leaked, password_reset: p.passwordReset,
   };
+  // Neon backend: an emailed code is waiting in this browser (sign-in or email verification).
+  const pending = await pendingCode();
+  const codePending = pending && pending.purpose !== "reset" ? pending : null;
   const inputClass = "mt-1 block w-full rounded-md border border-line px-3 py-3 text-base";
   return (
     <div className="space-y-8">
+      {codePending ? (
+        <form action="/auth/code" method="post" className="space-y-4 rounded-md border border-line p-4" data-testid="code-form">
+          <p className="text-sm font-semibold" role="status">{fill(p.codeTitle, { email: codePending.email })}</p>
+          <input type="hidden" name="next" value={next} />
+          <input type="hidden" name="locale" value={locale} />
+          <label className="block">
+            <span className="text-sm font-semibold">{p.codeLabel}</span>
+            <input type="text" name="code" required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" className={inputClass} />
+          </label>
+          {status === "code_invalid" ? <p role="alert" className="text-sm font-semibold text-alert" data-testid="code-status">{p.codeInvalid}</p> : null}
+          <button type="submit" className="btn btn-gold w-full" data-testid="code-submit">{p.codeSubmit}</button>
+        </form>
+      ) : null}
       <form action="/auth/signin" method="post" className="space-y-4" data-testid="magic-form">
         <input type="hidden" name="next" value={next} />
         <input type="hidden" name="locale" value={locale} />
@@ -64,8 +83,8 @@ async function SignInForm({ locale, searchParams }: { locale: Locale; searchPara
           <span className="mt-1 block text-xs text-muted">{fill(p.hint, { min: PASSWORD_MIN_LENGTH })}</span>
         </label>
         {status && passwordStatus[status] ? (
-          <p role={status === "confirm" || status === "reset_sent" || status === "recovery_cancelled" ? "status" : "alert"} data-testid="password-status"
-            className={status === "confirm" || status === "reset_sent" || status === "recovery_cancelled" ? "rounded-md bg-mint p-3 text-sm font-semibold" : "text-sm font-semibold text-alert"}>
+          <p role={OK_STATUSES.has(status) ? "status" : "alert"} data-testid="password-status"
+            className={OK_STATUSES.has(status) ? "rounded-md bg-mint p-3 text-sm font-semibold" : "text-sm font-semibold text-alert"}>
             {passwordStatus[status]}
           </p>
         ) : null}

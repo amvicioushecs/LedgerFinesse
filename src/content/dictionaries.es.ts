@@ -132,6 +132,12 @@ export const es: Dictionary = {
       confirmContinue: "Continuar como {email}",
       confirmCancel: "No es mi cuenta",
       confirmCancelled: "No se hizo ningún cambio y tu contraseña sigue igual. Si no pediste restablecerla, puedes ignorar ese correo.",
+      codeTitle: "Escribe el código de 6 dígitos que enviamos a {email}.",
+      codeLabel: "Código",
+      codeSubmit: "Continuar",
+      codeInvalid: "Ese código no es correcto. Revisa el correo más reciente e inténtalo de nuevo.",
+      leaked: "Esa contraseña apareció en una filtración de datos. Elige otra.",
+      passwordReset: "Tu contraseña se cambió. Inicia sesión con tu nueva contraseña.",
     },
   },
   upload: {

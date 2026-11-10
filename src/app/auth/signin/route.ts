@@ -26,5 +26,5 @@ export async function POST(request: NextRequest) {
 
   const result = await startEmailSignIn(email, next, locale);
   if (result.kind === "signed_in") return NextResponse.redirect(new URL(next, request.url), 303);
-  return back(result.kind === "email_sent" ? "sent" : "error");
+  return back(result.kind === "email_sent" ? "sent" : result.kind === "code_sent" ? "code" : "error");
 }

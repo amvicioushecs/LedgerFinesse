@@ -150,3 +150,27 @@ export class NeonPasswordProvider implements PasswordAuthProvider {
     await this.pending.set({ purpose: "verify", email: address });
   }
 }
+
+/**
+ * @neondatabase/auth (0.7.0-beta) rewrites Better Auth errors into Supabase-style codes and loses the OTP ones
+ * (INVALID_OTP and OTP_EXPIRED become validation_failed, TOO_MANY_ATTEMPTS becomes feature_not_supported). Map back,
+ * using the status and message for codes. Anything unrecognized stays unexpected (never "wrong password/code").
+ */
+const FROM_SDK: Record<string, string> = {
+  invalid_credentials: "INVALID_EMAIL_OR_PASSWORD",
+  email_not_confirmed: "EMAIL_NOT_VERIFIED",
+  user_already_exists: "USER_ALREADY_EXISTS",
+  email_exists: "USER_ALREADY_EXISTS",
+  weak_password: "PASSWORD_TOO_SHORT",
+};
+export function fromSdkError(error: { code?: string; status?: number; message?: string }, kind: "password" | "otp"): string {
+  const message = (error.message ?? "").toLowerCase();
+  if (kind === "otp") {
+    if (error.status === 403 && message.includes("too many")) return "TOO_MANY_ATTEMPTS";
+    if (error.status === 400 && message.includes("expired")) return "OTP_EXPIRED";
+    if (error.status === 400 && message.includes("invalid otp")) return "INVALID_OTP";
+  } else if (error.code && FROM_SDK[error.code]) {
+    return FROM_SDK[error.code];
+  }
+  return error.code || `HTTP_${error.status ?? 0}`;
+}

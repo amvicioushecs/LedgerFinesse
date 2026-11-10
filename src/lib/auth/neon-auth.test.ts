@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { NeonPasswordProvider, resetWithCode, startCodeSignIn, verifyCode, type NeonAuthApi, type NeonAuthResult, type PendingStore } from "@/lib/auth/neon-auth";
+import { NeonPasswordProvider, fromSdkError, resetWithCode, startCodeSignIn, verifyCode, type NeonAuthApi, type NeonAuthResult, type PendingStore } from "@/lib/auth/neon-auth";
 import type { PendingCode } from "@/lib/auth/pending-code";
+import type { PasswordAuthProvider } from "@/lib/auth/password";
 import type { RateLimitOutcome } from "@/lib/rate-limit";
 
 const ok: NeonAuthResult = { ok: true };
@@ -94,7 +95,7 @@ describe("email code sign-in (replaces the magic link: same-browser completion)"
 
 describe("NeonPasswordProvider", () => {
   it("maps sign-in results; an unverified account gets a fresh verify code in this browser", async () => {
-    const provider = new NeonPasswordProvider(api, pending);
+    const provider: PasswordAuthProvider = new NeonPasswordProvider(api, pending);
     expect(await provider.signIn("a@example.com", "pw")).toBe("ok");
     api.results.signInEmail = fail("INVALID_EMAIL_OR_PASSWORD");
     expect(await provider.signIn("a@example.com", "pw")).toBe("invalid");
@@ -107,7 +108,7 @@ describe("NeonPasswordProvider", () => {
   });
 
   it("answers an existing address exactly like a new sign-up (no account enumeration)", async () => {
-    const provider = new NeonPasswordProvider(api, pending);
+    const provider: PasswordAuthProvider = new NeonPasswordProvider(api, pending);
     expect(await provider.signUp("new@example.com", "pw", "")).toBe("confirm");
     expect(api.calls).toEqual(["signUpEmail:new@example.com", "sendOtp:email-verification:new@example.com"]);
     const fresh = { ...pending.value };
@@ -122,14 +123,14 @@ describe("NeonPasswordProvider", () => {
   });
 
   it("sends a reset code and binds it to this browser, whether or not the account exists", async () => {
-    const provider = new NeonPasswordProvider(api, pending);
+    const provider: PasswordAuthProvider = new NeonPasswordProvider(api, pending);
     await provider.sendReset("A@example.com", "");
     expect(api.calls).toEqual(["sendOtp:forget-password:a@example.com"]);
     expect(pending.value).toEqual({ purpose: "reset", email: "a@example.com" });
   });
 
   it("does not offer a session password change (Neon Auth resets with a code instead)", async () => {
-    expect(await new NeonPasswordProvider(api, pending).updatePassword("whatever-123")).toBe("error");
+    expect(await (new NeonPasswordProvider(api, pending) as PasswordAuthProvider).updatePassword("whatever-123")).toBe("error");
     expect(api.calls).toEqual([]);
   });
 });
@@ -164,5 +165,26 @@ describe("resetWithCode (the recovery path: code from the email + new password, 
     api.results.resetPasswordOtp = fail("INVALID_OTP");
     expect(await resetWithCode(deps(), { code: "000000", password: "a-new-password", locale: "en" })).toEqual({ kind: "back", status: "code_invalid" });
     expect(await resetWithCode(deps("limited"), { code: "000000", password: "a-new-password", locale: "en" })).toEqual({ kind: "back", status: "locked" });
+  });
+});
+
+describe("fromSdkError (the SDK reports Supabase-style codes; map back to Better Auth's)", () => {
+  it("maps credential and account errors", () => {
+    expect(fromSdkError({ code: "invalid_credentials", status: 401, message: "Invalid email or password" }, "password")).toBe("INVALID_EMAIL_OR_PASSWORD");
+    expect(fromSdkError({ code: "email_not_confirmed", status: 422, message: "Email verification required" }, "password")).toBe("EMAIL_NOT_VERIFIED");
+    expect(fromSdkError({ code: "user_already_exists", status: 409, message: "User already exists" }, "password")).toBe("USER_ALREADY_EXISTS");
+    expect(fromSdkError({ code: "weak_password", status: 400, message: "Password is too short" }, "password")).toBe("PASSWORD_TOO_SHORT");
+  });
+
+  it("maps code errors by status and message (Neon Auth: INVALID_OTP 400, TOO_MANY_ATTEMPTS 403, OTP_EXPIRED 400)", () => {
+    expect(fromSdkError({ code: "validation_failed", status: 400, message: "Invalid OTP" }, "otp")).toBe("INVALID_OTP");
+    expect(fromSdkError({ code: "feature_not_supported", status: 403, message: "Too many attempts" }, "otp")).toBe("TOO_MANY_ATTEMPTS");
+    expect(fromSdkError({ code: "validation_failed", status: 400, message: "OTP expired" }, "otp")).toBe("OTP_EXPIRED");
+  });
+
+  it("keeps anything else as an unexpected error, never as a wrong password or code", () => {
+    expect(fromSdkError({ code: "NETWORK_TIMEOUT", status: 502, message: "timeout" }, "password")).toBe("NETWORK_TIMEOUT");
+    expect(fromSdkError({ code: "unexpected_failure", status: 500, message: "boom" }, "otp")).toBe("unexpected_failure");
+    expect(fromSdkError({ status: 0 }, "otp")).toBe("HTTP_0");
   });
 });

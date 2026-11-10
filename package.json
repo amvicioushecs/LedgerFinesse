@@ -19,7 +19,8 @@
     "build:cf": "npm run blog:build && opennextjs-cloudflare build",
     "preview:cf": "npm run build:cf && opennextjs-cloudflare preview",
     "test:e2e": "playwright test",
-    "test:e2e:cf": "E2E_TARGET=worker SCREENSHOT_DIR=/workspace/ledgerfinesse/screenshots/v2/worker playwright test"
+    "test:e2e:cf": "E2E_TARGET=worker SCREENSHOT_DIR=/workspace/ledgerfinesse/screenshots/v2/worker playwright test",
+    "test:e2e:neon": "playwright test -c playwright.neon.config.ts"
   },
   "dependencies": {
     "@neon/config": "^1.14.0",

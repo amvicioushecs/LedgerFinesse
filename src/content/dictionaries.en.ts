@@ -130,6 +130,12 @@ export const en = {
       confirmContinue: "Continue as {email}",
       confirmCancel: "Not my account",
       confirmCancelled: "No changes were made, and your password is the same. If you didn't ask for a reset, you can ignore that email.",
+      codeTitle: "Enter the 6-digit code we emailed to {email}.",
+      codeLabel: "Code",
+      codeSubmit: "Continue",
+      codeInvalid: "That code isn't right. Check the latest email and try again.",
+      leaked: "That password has appeared in a data breach. Choose a different one.",
+      passwordReset: "Your password was changed. Sign in with your new password.",
     },
   },
   upload: {
