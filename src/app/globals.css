@@ -96,6 +96,21 @@ header .tap-target {
   margin-block: -12px;
 }
 
+/* Standalone markdown/source links that are not running text (Design Desk 44px hit area). */
+.markdown-body p:has(> a:only-child) a,
+.markdown-body p:has(> strong:only-child) a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding-inline: 12px;
+}
+.markdown-body p:has(> a:only-child) a:focus-visible,
+.markdown-body p:has(> strong:only-child) a:focus-visible {
+  outline: 2px solid var(--color-forest);
+  outline-offset: 2px;
+}
+
 .pill {
   display: inline-flex;
   align-items: center;

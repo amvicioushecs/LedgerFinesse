@@ -85,7 +85,7 @@ export default async function BlogPostPage({ params }: Props) {
       <p className="mt-3 text-sm text-muted">
         {t.blog.published} <time dateTime={post.date}>{post.date}</time>
       </p>
-      <div className="mt-8 space-y-4 leading-relaxed [&_a]:font-semibold [&_a]:underline [&_blockquote]:border-l-4 [&_blockquote]:border-line [&_blockquote]:pl-4 [&_h2]:font-display [&_h2]:mt-10 [&_h2]:text-2xl [&_h2]:font-bold [&_h3]:mt-6 [&_h3]:font-bold [&_li]:ml-5 [&_ol]:list-decimal [&_table]:w-full [&_table]:text-sm [&_td]:border [&_td]:border-line [&_td]:p-2 [&_th]:border [&_th]:border-line [&_th]:p-2 [&_ul]:list-disc">
+      <div className="markdown-body mt-8 space-y-4 leading-relaxed [&_a]:font-semibold [&_a]:underline [&_blockquote]:border-l-4 [&_blockquote]:border-line [&_blockquote]:pl-4 [&_h2]:font-display [&_h2]:mt-10 [&_h2]:text-2xl [&_h2]:font-bold [&_h3]:mt-6 [&_h3]:font-bold [&_li]:ml-5 [&_ol]:list-decimal [&_table]:w-full [&_table]:text-sm [&_td]:border [&_td]:border-line [&_td]:p-2 [&_th]:border [&_th]:border-line [&_th]:p-2 [&_ul]:list-disc">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
@@ -105,7 +105,7 @@ export default async function BlogPostPage({ params }: Props) {
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm">
           {post.sources.map((s) => (
             <li key={s.url}>
-              <a href={s.url} target="_blank" rel="noopener noreferrer" className="underline">{s.title}</a>
+              <a href={s.url} target="_blank" rel="noopener noreferrer" className="tap-target underline">{s.title}</a>
             </li>
           ))}
         </ol>
