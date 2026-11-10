@@ -2,6 +2,9 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
+/** A fresh client IP per auth test so the 10/min sign-in limit (live under miniflare too) isn't shared across tests. */
+const freshIp = () => `10.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
+
 const SHOTS = process.env.SCREENSHOT_DIR ?? "/workspace/ledgerfinesse/screenshots/v2";
 mkdirSync(SHOTS, { recursive: true });
 
@@ -41,7 +44,7 @@ for (const locale of ["en", "es"] as const) {
       await page.goto(`/${locale}/audits/new`);
       await page.waitForURL(new RegExp(`/${locale}/signin`));
       await shot(page, `${locale}-02-signin`);
-      await page.locator('input[name="email"]').fill(email);
+      await page.getByTestId("magic-form").locator('input[name="email"]').fill(email);
       await page.getByTestId("signin-submit").click();
       await page.waitForURL(new RegExp(`/${locale}/audits/new`));
 
@@ -142,13 +145,59 @@ test("malformed audit ids are 404s, not server errors", async ({ request, baseUR
 });
 
 test("sign-in never redirects off-site, even through dot-segment tricks", async ({ request, baseURL }) => {
+  const ip = freshIp();
   for (const next of ["/.//evil.com", "/%2e%2e//evil.com", "//evil.com"]) {
     const res = await request.post("/auth/signin", {
       form: { email: `redirect-${Date.now()}@example.test`, next, locale: "en" },
-      headers: { origin: baseURL! },
+      headers: { origin: baseURL!, "cf-connecting-ip": ip },
       maxRedirects: 0,
     });
     expect(res.status(), next).toBe(303);
     expect(new URL(res.headers()["location"], baseURL).origin, next).toBe(new URL(baseURL!).origin);
   }
+});
+
+test("password sign-up, wrong password, sign-in, reset email and new password (local dev backend)", async ({ page, context }) => {
+  const email = `pw-${test.info().project.name}-${Date.now()}@example.test`;
+  const form = page.getByTestId("password-form");
+  await page.setExtraHTTPHeaders({ "cf-connecting-ip": freshIp() });
+  await page.goto(`/en/signin?next=${encodeURIComponent("/en/audits/new")}`);
+  await form.locator('input[name="email"]').fill(email);
+  await form.locator('input[name="password"]').fill("first password");
+  await page.getByTestId("password-signup").click();
+  await page.waitForURL(/\/en\/audits\/new$/);
+  await shot(page, "en-10-password-signed-up");
+
+  await context.clearCookies();
+  await page.goto(`/en/signin?next=${encodeURIComponent("/.//evil.com")}`);
+  await form.locator('input[name="email"]').fill(email);
+  await form.locator('input[name="password"]').fill("wrong password");
+  await page.getByTestId("password-signin").click();
+  await expect(page.getByTestId("password-status")).toContainText("don't match");
+  await shot(page, "en-11-password-invalid");
+  await form.locator('input[name="email"]').fill(email);
+  await form.locator('input[name="password"]').fill("first password");
+  await page.getByTestId("password-signin").click();
+  await page.waitForURL(/\/en\/audits\/new$/);
+
+  await page.goto("/en/reset-password");
+  await page.locator('input[name="password"]').fill("second password");
+  await page.getByTestId("update-password").click();
+  await page.waitForURL(/\/en\/audits\?password=updated$/);
+
+  await context.clearCookies();
+  await page.goto("/en/signin");
+  await page.getByTestId("reset-form").locator('input[name="email"]').fill(email);
+  await page.getByTestId("reset-submit").click();
+  await expect(page.getByTestId("password-status")).toContainText("If that email has an account");
+  await form.locator('input[name="email"]').fill(email);
+  await form.locator('input[name="password"]').fill("second password");
+  await page.getByTestId("password-signin").click();
+  await page.waitForURL(/\/en\/audits\/new$/);
+});
+
+test("reset-password needs a session", async ({ page }) => {
+  await page.goto("/es/reset-password");
+  await page.waitForURL(/\/es\/signin\?status=expired$/);
+  await expect(page.getByTestId("password-status")).toBeVisible();
 });

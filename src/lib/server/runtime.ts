@@ -8,6 +8,9 @@ import type { AuditDeps } from "@/lib/audits/service";
 import { SupabaseAuditRepository, SupabaseDocumentStore } from "@/lib/audits/supabase-repository";
 import type { AuditRepository, Extractor } from "@/lib/audits/types";
 import { DEV_SESSION_COOKIE, signDevSession, verifyDevSession } from "@/lib/auth/dev-session";
+import { MemoryPasswordProvider } from "@/lib/auth/memory-password";
+import type { PasswordAuthProvider } from "@/lib/auth/password";
+import { SupabasePasswordProvider } from "@/lib/auth/supabase-password";
 import { serverEnv, type ServerEnv } from "@/lib/env";
 import { demoExtractor } from "@/lib/extraction/demo";
 import { createGeminiExtractor } from "@/lib/extraction/gemini";
@@ -32,6 +35,7 @@ const local = globalThis as typeof globalThis & {
   __lfMemory?: { repo: MemoryAuditRepository; files: MemoryDocumentStore };
   __lfMockGateway?: MockCheckoutGateway;
   __lfMockRefunds?: MockRefundGateway;
+  __lfPasswords?: MemoryPasswordProvider;
 };
 
 function memory() {
@@ -92,13 +96,7 @@ function devSecret(env: ServerEnv): string {
 export async function startEmailSignIn(email: string, nextPath: string, locale: Locale): Promise<SignInResult> {
   const env = serverEnv();
   if (env.backend === "memory") {
-    (await cookies()).set(DEV_SESSION_COOKIE, await signDevSession(email, devSecret(env)), {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: env.appUrl.startsWith("https://"),
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7,
-    });
+    await setDevSession(env, email);
     return { kind: "signed_in" };
   }
   const supabase = await supabaseForRequest(env);
@@ -114,6 +112,47 @@ export async function startEmailSignIn(email: string, nextPath: string, locale: 
     return { kind: "error" };
   }
   return { kind: "email_sent" };
+}
+
+async function setDevSession(env: ServerEnv, email: string): Promise<void> {
+  (await cookies()).set(DEV_SESSION_COOKIE, await signDevSession(email, devSecret(env)), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: env.appUrl.startsWith("https://"),
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+}
+
+/** Development only: the in-memory password store, signing in with the same dev session cookie as the magic link. */
+function devPasswordProvider(env: ServerEnv): PasswordAuthProvider {
+  devSecret(env);
+  local.__lfPasswords ??= new MemoryPasswordProvider();
+  const store = local.__lfPasswords;
+  return {
+    async signIn(email, password) {
+      const result = await store.signIn(email, password);
+      if (result === "ok") await setDevSession(env, email);
+      return result;
+    },
+    async signUp(email, password) {
+      const result = await store.signUp(email, password);
+      if (result === "signed_in") await setDevSession(env, email);
+      return result;
+    },
+    sendReset: () => store.sendReset(),
+    async updatePassword(password) {
+      store.currentEmail = (await getCurrentUser())?.email ?? null;
+      return store.updatePassword(password);
+    },
+  };
+}
+
+/** Password sign-in, sign-up and reset: same "signin" rate limits (per IP and per email/user) as the magic link. */
+export async function passwordDeps(request: Request) {
+  const env = serverEnv();
+  const provider = env.backend === "memory" ? devPasswordProvider(env) : new SupabasePasswordProvider(await supabaseForRequest(env));
+  return { provider, rateLimited: (subject: string) => rateLimited(request, "signin", subject), appUrl: env.appUrl };
 }
 
 export async function signOut(): Promise<void> {
