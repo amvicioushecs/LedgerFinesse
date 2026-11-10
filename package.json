@@ -16,10 +16,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "build:cf": "npm run blog:build && opennextjs-cloudflare build",
-    "preview:cf": "npm run build:cf && opennextjs-cloudflare preview",
+    "build:spacefast": "npm run blog:build && opennextjs-cloudflare build",
+    "preview:worker": "npm run build:spacefast && opennextjs-cloudflare preview",
     "test:e2e": "playwright test",
-    "test:e2e:cf": "E2E_TARGET=worker SCREENSHOT_DIR=/workspace/ledgerfinesse/screenshots/v2/worker playwright test",
+    "test:e2e:worker": "E2E_TARGET=worker SCREENSHOT_DIR=/workspace/ledgerfinesse/screenshots/v2/worker playwright test",
     "test:e2e:neon": "playwright test -c playwright.neon.config.ts",
     "test:e2e:neon:stripe": "scripts/e2e-neon-stripe.sh"
   },

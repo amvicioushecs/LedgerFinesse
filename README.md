@@ -2,7 +2,7 @@
 
 Audits a renter's rent ledger against their lease. The free scan returns the number of disputed charges and the total. The itemized breakdown and the dispute letter unlock for a flat 15% of the money owed, charged through Stripe Checkout. LedgerFinesse is not a law firm and does not give legal advice.
 
-Next.js 16 (App Router) built as an OpenNext worker (`npm run build:cf`) for Spacefast Functions, Supabase (Postgres, Auth, Storage), Stripe Checkout, Gemini for document extraction only.
+Next.js 16 (App Router) built as an OpenNext worker (`npm run build:spacefast`) for Spacefast Functions, Supabase (Postgres, Auth, Storage), Stripe Checkout, Gemini for document extraction only.
 
 ## Requirements
 - Node 24 (`nvm use` reads `.nvmrc`).
@@ -61,10 +61,10 @@ Fixed-window counters in Supabase Postgres (`public.rate_limits`, atomic `rate_l
 | `npm test` / `npm run test:coverage` | Vitest (rules engine branch coverage must stay >= 95%) |
 | `npm run lint`, `npm run typecheck` | ESLint, `next typegen` + `tsc` |
 | `npm run build` | Compiles blog MDX, then `next build` |
-| `npm run build:cf` | OpenNext build for Workers |
-| `npm run preview:cf` | `build:cf`, then run the worker locally in workerd |
+| `npm run build:spacefast` | The Spacefast build: compiles the blog, then the OpenNext adapter writes the prebuilt worker to `.open-next/` for `sf publish --prebuilt` |
+| `npm run preview:worker` | `build:spacefast`, then run the worker locally in workerd |
 | `npm run test:e2e` | Playwright (desktop + Pixel 7, EN + ES) against `next start` |
-| `npm run test:e2e:cf` | Same suite against the worker in local workerd (`build:cf` first) |
+| `npm run test:e2e:worker` | Same suite against the worker in local workerd (`build:spacefast` first) |
 | `npm run blog:build` | Compiles `content/blog/{en,es}/*.mdx` into `src/content/blog.generated.ts` |
 
 ## Folder map
@@ -85,7 +85,7 @@ reference/prototype/     Original Vite prototype, reference only
 ```
 
 ## Known limitation: Cache Components are off
-`cacheComponents` is disabled in `next.config.ts`. With `@opennextjs/cloudflare` 1.20.13 and a `proxy.ts`, request-time renders hang in workerd. The upstream fix is opennextjs/opennextjs-cloudflare#1318, which has not been merged. Re-enable it once that fix ships, after `npm run test:e2e:cf` passes.
+`cacheComponents` is disabled in `next.config.ts`. With `@opennextjs/cloudflare` 1.20.13 and a `proxy.ts`, request-time renders hang in workerd. The upstream fix is opennextjs/opennextjs-cloudflare#1318, which has not been merged. Re-enable it once that fix ships, after `npm run test:e2e:worker` passes.
 
 ## Ground rules
 - Money is integer cents everywhere.
