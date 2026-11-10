@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 // E2E_TARGET=worker runs the same suite against the OpenNext worker in local workerd
 // (`npm run build:cf` first). Nothing is deployed.
 const onWorker = process.env.E2E_TARGET === "worker";
-const PORT = onWorker ? 8788 : 3200;
+const PORT = Number(process.env.E2E_PORT ?? (onWorker ? 8788 : 3200));
 const baseURL = `http://localhost:${PORT}`;
 const localEnv = { SITE_ENV: "development", LF_BACKEND: "memory", STRIPE_MODE: "mock", EXTRACTION_MODE: "demo" };
 
