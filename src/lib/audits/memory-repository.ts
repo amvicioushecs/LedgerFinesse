@@ -22,6 +22,7 @@ export class MemoryAuditRepository implements AuditRepository {
   private scans = new Map<string, ScanResult>();
   private payments = new Map<string, PaymentRecord>();
   private events = new Set<string>();
+  private scanStartedAt = new Map<string, string>();
 
   async insertAudit(audit: AuditRecord) {
     this.audits.set(audit.id, { ...audit });
@@ -47,10 +48,11 @@ export class MemoryAuditRepository implements AuditRepository {
     return this.documents.filter((d) => d.userId === userId && d.auditId === auditId).map((d) => ({ ...d }));
   }
 
-  async claimForScan(userId: string, auditId: string) {
+  async claimForScan(userId: string, auditId: string, startedAt: string) {
     const audit = this.audits.get(auditId);
     if (!audit || audit.userId !== userId || audit.status !== "draft") return false;
     audit.status = "processing";
+    this.scanStartedAt.set(auditId, startedAt);
     return true;
   }
 
@@ -70,7 +72,16 @@ export class MemoryAuditRepository implements AuditRepository {
 
   async markFailed(auditId: string) {
     const audit = this.audits.get(auditId);
-    if (audit) audit.status = "failed";
+    if (audit?.status === "processing") audit.status = "failed";
+  }
+
+  async failStaleScans(userId: string, startedBefore: string) {
+    for (const audit of this.audits.values()) {
+      const started = this.scanStartedAt.get(audit.id);
+      if (audit.userId === userId && audit.status === "processing" && started !== undefined && started < startedBefore) {
+        audit.status = "failed";
+      }
+    }
   }
 
   private unlockedScan(userId: string, auditId: string): ScanResult | null {

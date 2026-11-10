@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createGeminiExtractor, parseModelExtraction } from "@/lib/extraction/gemini";
+import { GEMINI_TIMEOUT_MS, createGeminiExtractor, parseModelExtraction } from "@/lib/extraction/gemini";
 
 const modelJson = {
   lease: { startDate: "2026-01-01", endDate: "2026-12-31", monthlyRentCents: 245000, dueDay: 1, gracePeriodDays: 4,
@@ -48,6 +48,22 @@ describe("createGeminiExtractor", () => {
     expect(body?.contents[0].parts.filter((p) => "inlineData" in p)).toHaveLength(2);
     expect(e.place).toEqual({ stateCode: "TX", city: "Austin" });
     expect(e.ledger).toHaveLength(2);
+  });
+
+  it("aborts a request that takes longer than the timeout", async () => {
+    let signal: AbortSignal | null | undefined;
+    const fetchImpl: typeof fetch = (_input, init) =>
+      new Promise((_resolve, reject) => {
+        signal = init?.signal;
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+      });
+    const extractor = createGeminiExtractor({ apiKey: "k", model: "m", timeoutMs: 20 }, fetchImpl);
+    await expect(extractor.extract({ jurisdiction: "austin-tx", documents: [] })).rejects.toThrow(/timed out|abort/i);
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("uses a 60 second timeout by default", () => {
+    expect(GEMINI_TIMEOUT_MS).toBe(60_000);
   });
 
   it("throws on an API error without leaking the key", async () => {

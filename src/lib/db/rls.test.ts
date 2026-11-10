@@ -143,7 +143,7 @@ describe("save_scan_result", () => {
   });
 
   beforeEach(async () => {
-    await db.query(`insert into public.audits (id, user_id, status, jurisdiction_key) values ($1, $2, 'processing', 'san-diego-ca')`, [AUDIT_C, A]);
+    await db.query(`insert into public.audits (id, user_id, status, jurisdiction_key, scan_started_at) values ($1, $2, 'processing', 'san-diego-ca', now())`, [AUDIT_C, A]);
   });
 
   it("stores findings, letters and the summary in one call", async () => {

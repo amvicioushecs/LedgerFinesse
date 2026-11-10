@@ -145,11 +145,11 @@ export class SupabaseAuditRepository implements AuditRepository {
     }));
   }
 
-  async claimForScan(userId: string, auditId: string) {
+  async claimForScan(userId: string, auditId: string, startedAt: string) {
     const data = check(
       await this.admin
         .from("audits")
-        .update({ status: "processing" })
+        .update({ status: "processing", scan_started_at: startedAt })
         .eq("id", auditId)
         .eq("user_id", userId)
         .eq("status", "draft")
@@ -165,6 +165,18 @@ export class SupabaseAuditRepository implements AuditRepository {
 
   async markFailed(auditId: string) {
     check(await this.admin.from("audits").update({ status: "failed" }).eq("id", auditId).eq("status", "processing"), "mark failed");
+  }
+
+  async failStaleScans(userId: string, startedBefore: string) {
+    check(
+      await this.admin
+        .from("audits")
+        .update({ status: "failed" })
+        .eq("user_id", userId)
+        .eq("status", "processing")
+        .lt("scan_started_at", startedBefore),
+      "fail stale scans",
+    );
   }
 
   async findUnlockedFindings(userId: string, auditId: string) {

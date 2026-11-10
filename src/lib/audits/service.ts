@@ -8,6 +8,8 @@ import { audit as runEngine } from "@/lib/rules-engine/audit";
 import { sha256Hex, validateUpload, type UploadCheck } from "@/lib/uploads";
 
 export const ENGINE_VERSION = "rules-engine 2026-11-09";
+/** A scan runs inside one request; one still processing after this long died with it. */
+export const STALE_SCAN_MS = 10 * 60_000;
 
 export interface AuditDeps {
   repo: AuditRepository;
@@ -104,7 +106,7 @@ export async function scanAudit(
   deps: AuditDeps,
   userId: string,
   auditId: string,
-): Promise<{ ok: true } | Failure<"not_found" | "not_scannable" | "missing_documents" | "extraction_failed">> {
+): Promise<{ ok: true } | Failure<"not_found" | "not_scannable" | "missing_documents" | "extraction_failed" | "scan_failed">> {
   const audit = await deps.repo.findAudit(userId, auditId);
   if (!audit) return { ok: false, reason: "not_found" };
   if (audit.status !== "draft") return { ok: false, reason: "not_scannable" };
@@ -112,8 +114,22 @@ export async function scanAudit(
   if (!docs.some((d) => d.kind === "lease") || !docs.some((d) => d.kind === "ledger")) {
     return { ok: false, reason: "missing_documents" };
   }
-  if (!(await deps.repo.claimForScan(userId, auditId))) return { ok: false, reason: "not_scannable" };
+  if (!(await deps.repo.claimForScan(userId, auditId, deps.now().toISOString()))) return { ok: false, reason: "not_scannable" };
 
+  try {
+    return await runClaimedScan(deps, audit, docs);
+  } catch {
+    await deps.repo.markFailed(auditId);
+    return { ok: false, reason: "scan_failed" };
+  }
+}
+
+async function runClaimedScan(
+  deps: AuditDeps,
+  audit: AuditRecord,
+  docs: Awaited<ReturnType<AuditRepository["listDocuments"]>>,
+): Promise<{ ok: true } | Failure<"extraction_failed">> {
+  const auditId = audit.id;
   let report: Report;
   let extraction;
   try {
@@ -167,6 +183,20 @@ export async function scanAudit(
   return { ok: true };
 }
 
+async function failStaleScans(deps: AuditDeps, userId: string) {
+  await deps.repo.failStaleScans(userId, new Date(deps.now().getTime() - STALE_SCAN_MS).toISOString());
+}
+
+export async function getAuditStatus(deps: AuditDeps, userId: string, auditId: string): Promise<AuditRecord["status"] | null> {
+  await failStaleScans(deps, userId);
+  return (await deps.repo.findAudit(userId, auditId))?.status ?? null;
+}
+
+export async function listAudits(deps: AuditDeps, userId: string): Promise<AuditRecord[]> {
+  await failStaleScans(deps, userId);
+  return deps.repo.listAudits(userId);
+}
+
 export interface FreeResult {
   audit: AuditRecord;
   summary: FreeSummary | null;
@@ -175,6 +205,7 @@ export interface FreeResult {
 
 /** What anyone signed in as the owner may see before paying: status, count, total, fee. */
 export async function getFreeResult(deps: AuditDeps, userId: string, auditId: string): Promise<FreeResult | null> {
+  await failStaleScans(deps, userId);
   const audit = await deps.repo.findAudit(userId, auditId);
   if (!audit) return null;
   if (audit.totalOwedCents === null || audit.itemCount === null) return { audit, summary: null, decision: null };

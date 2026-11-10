@@ -107,10 +107,13 @@ export interface AuditRepository {
   listAudits(userId: string): Promise<AuditRecord[]>;
   insertDocument(doc: DocumentRecord): Promise<void>;
   listDocuments(userId: string, auditId: string): Promise<DocumentRecord[]>;
-  /** Atomically move draft → processing. False if the audit is not a draft owned by the user. */
-  claimForScan(userId: string, auditId: string): Promise<boolean>;
+  /** Atomically move draft → processing, stamping when the scan started. False if not a draft owned by the user. */
+  claimForScan(userId: string, auditId: string, startedAt: string): Promise<boolean>;
   saveScanResult(auditId: string, result: ScanResult): Promise<void>;
+  /** processing → failed. No-op for any other status. */
   markFailed(auditId: string): Promise<void>;
+  /** Fail the user's audits that have been processing since before `startedBefore` (a scan whose request died). */
+  failStaleScans(userId: string, startedBefore: string): Promise<void>;
   /** Empty unless the audit is unlocked (paywall). */
   findUnlockedFindings(userId: string, auditId: string): Promise<StoredFinding[]>;
   findUnlockedLetter(userId: string, auditId: string, locale: Locale): Promise<StoredLetter | null>;

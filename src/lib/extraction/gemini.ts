@@ -79,7 +79,13 @@ function base64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export function createGeminiExtractor(config: { apiKey: string; model: string }, fetchImpl: typeof fetch = fetch): Extractor {
+/** Keeps a scan well inside STALE_SCAN_MS so a hung model call fails the audit instead of leaving it processing. */
+export const GEMINI_TIMEOUT_MS = 60_000;
+
+export function createGeminiExtractor(
+  config: { apiKey: string; model: string; timeoutMs?: number },
+  fetchImpl: typeof fetch = fetch,
+): Extractor {
   return {
     source: "model",
     async extract({ jurisdiction, documents }) {
@@ -95,6 +101,7 @@ export function createGeminiExtractor(config: { apiKey: string; model: string },
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.model)}:generateContent`,
         {
           method: "POST",
+          signal: AbortSignal.timeout(config.timeoutMs ?? GEMINI_TIMEOUT_MS),
           headers: { "content-type": "application/json", "x-goog-api-key": config.apiKey },
           body: JSON.stringify({
             contents: [{ role: "user", parts }],

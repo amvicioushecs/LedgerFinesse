@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { MemoryAuditRepository, MemoryDocumentStore } from "@/lib/audits/memory-repository";
-import { attachDocument, createAudit, getFreeResult, getUnlockedReport, scanAudit, type AuditDeps } from "@/lib/audits/service";
+import { attachDocument, createAudit, getAuditStatus, getFreeResult, getUnlockedReport, listAudits, scanAudit, STALE_SCAN_MS, type AuditDeps } from "@/lib/audits/service";
 import { demoExtractor } from "@/lib/extraction/demo";
 import type { Extractor } from "@/lib/audits/types";
 import { SAMPLE_CASE } from "@/content/sample-case";
@@ -110,6 +110,32 @@ describe("scan", () => {
     const broken: Extractor = { source: "model", extract: async () => { throw new Error("model down"); } };
     const audit = await readyAudit(broken);
     expect(await scanAudit(deps, USER, audit.id)).toEqual({ ok: false, reason: "extraction_failed" });
+    expect((await getFreeResult(deps, USER, audit.id))?.audit.status).toBe("failed");
+  });
+});
+
+describe("an audit never stays stuck in processing", () => {
+  it("marks the audit failed when storing the result throws", async () => {
+    const audit = await readyAudit();
+    deps.repo.saveScanResult = async () => {
+      throw new Error("db down");
+    };
+    expect(await scanAudit(deps, USER, audit.id)).toEqual({ ok: false, reason: "scan_failed" });
+    expect((await getFreeResult(deps, USER, audit.id))?.audit.status).toBe("failed");
+  });
+
+  it("fails a scan claimed more than 10 minutes ago when the owner next reads it", async () => {
+    const audit = await readyAudit();
+    let clock = new Date("2026-11-09T18:00:00Z").getTime();
+    deps.now = () => new Date(clock);
+    expect(await deps.repo.claimForScan(USER, audit.id, deps.now().toISOString())).toBe(true); // the request then died mid-scan
+    expect(STALE_SCAN_MS).toBe(10 * 60_000);
+
+    clock += STALE_SCAN_MS - 1000;
+    expect(await getAuditStatus(deps, USER, audit.id)).toBe("processing");
+    clock += 2000;
+    expect(await getAuditStatus(deps, OTHER, audit.id)).toBeNull();
+    expect((await listAudits(deps, USER)).map((a) => a.status)).toEqual(["failed"]);
     expect((await getFreeResult(deps, USER, audit.id))?.audit.status).toBe("failed");
   });
 });

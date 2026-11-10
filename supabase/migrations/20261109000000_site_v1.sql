@@ -50,6 +50,8 @@ create table public.audits (
   fee_cents          bigint check (fee_cents >= 0),
   engine_version     text,
   unlocked_at        timestamptz,
+  -- Set when a scan claims the audit; a scan still processing 10 minutes later is failed on the next read.
+  scan_started_at    timestamptz,
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now(),
   constraint audits_fee_is_15_percent check (
@@ -62,7 +64,8 @@ create table public.audits (
     status not in ('preview_ready', 'clean', 'unlocked')
     or (total_owed_cents is not null and item_count is not null and fee_cents is not null)
   ),
-  constraint audits_unlocked_has_time check (status <> 'unlocked' or unlocked_at is not null)
+  constraint audits_unlocked_has_time check (status <> 'unlocked' or unlocked_at is not null),
+  constraint audits_processing_has_start check (status <> 'processing' or scan_started_at is not null)
 );
 create trigger audits_updated_at before update on public.audits
   for each row execute function public.set_updated_at();

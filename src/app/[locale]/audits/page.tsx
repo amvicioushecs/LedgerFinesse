@@ -7,6 +7,7 @@ import { getJurisdiction } from "@/lib/jurisdictions";
 import type { Locale } from "@/lib/i18n/locales";
 import { currentLocale } from "@/lib/i18n/server";
 import { formatUsd } from "@/lib/money";
+import { listAudits } from "@/lib/audits/service";
 import { auditDeps, getCurrentUser } from "@/lib/server/runtime";
 import { PRIVATE_ROBOTS } from "@/lib/seo";
 
@@ -19,7 +20,7 @@ async function AuditList({ locale }: { locale: Locale }) {
   const user = await getCurrentUser();
   if (!user) redirect(`/${locale}/signin?next=/${locale}/audits`);
   const t = getDictionary(locale);
-  const audits = await (await auditDeps()).repo.listAudits(user.id);
+  const audits = await listAudits(await auditDeps(), user.id);
   if (audits.length === 0) return <p className="text-muted">{t.audits.empty}</p>;
   return (
     <ul className="divide-y divide-line rounded-lg border border-line">
