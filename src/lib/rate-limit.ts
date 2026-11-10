@@ -23,9 +23,14 @@ export const DEFAULT_RATE_LIMITS: RateLimits = {
 
 export const DEFAULT_IP_RATE_LIMIT: RateLimit = { limit: 100, windowSeconds: 60 };
 
-/** Counts one hit for each key in the current window; true when any key is over the limit. */
+/** Wrong passwords allowed per sign-in email per window (LF_PASSWORD_FAILURE_LIMIT). */
+export const DEFAULT_PASSWORD_FAILURE_LIMIT: RateLimit = { limit: 5, windowSeconds: 900 };
+
 export interface RateLimitStore {
+  /** Counts one hit for each key in the current window; true when any key is over the limit. */
   hit(keys: string[], limit: number, windowSeconds: number): Promise<boolean>;
+  /** Takes one hit back from each key in the current window (never below zero, never creates a key). */
+  forgive(keys: string[], windowSeconds: number): Promise<void>;
 }
 
 interface Deps {
@@ -67,6 +72,43 @@ export class MemoryRateLimitStore implements RateLimitStore {
     }
     return over;
   }
+
+  async forgive(keys: string[], windowSeconds: number) {
+    const window = Math.floor(this.now() / (windowSeconds * 1000));
+    for (const key of new Set(keys)) {
+      const bucket = `${window}:${key}`;
+      const hits = this.counts.get(bucket);
+      if (hits) this.counts.set(bucket, hits - 1);
+    }
+  }
+}
+
+/**
+ * Per-email wrong-password limit, separate from the sign-in request limit. A failure is reserved atomically
+ * BEFORE the attempt (so parallel guesses can't all pass a read-then-write check) and forgiven afterwards unless
+ * the password was wrong, so only wrong passwords count. A reservation and its forgive can fall in different
+ * windows at a boundary; the forgive then does nothing, which errs toward counting.
+ */
+export function passwordFailureGuard(deps: { store: RateLimitStore; limit: RateLimit; failOpen: boolean }) {
+  const key = (email: string) => [`password_fail:subject:${email}`];
+  return {
+    /** True when the email is locked out (or the limiter is unreachable outside development). */
+    async reserve(email: string): Promise<boolean> {
+      try {
+        return await deps.store.hit(key(email), deps.limit.limit, deps.limit.windowSeconds);
+      } catch (error) {
+        console.error(JSON.stringify({ msg: "rate limiter unreachable", action: "password_fail", failOpen: deps.failOpen, error: String(error) }));
+        return !deps.failOpen;
+      }
+    },
+    async forgive(email: string): Promise<void> {
+      try {
+        await deps.store.forgive(key(email), deps.limit.windowSeconds);
+      } catch (error) {
+        console.error(JSON.stringify({ msg: "rate limiter forgive failed", error: String(error) }));
+      }
+    },
+  };
 }
 
 const IP = /^[0-9A-Fa-f:.]{2,45}$/;

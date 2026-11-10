@@ -125,6 +125,7 @@ export const es: Dictionary = {
       newLabel: "Contraseña nueva",
       save: "Guardar contraseña nueva",
       updateError: "No pudimos guardar tu contraseña. Solicita un nuevo enlace e inténtalo de nuevo.",
+      locked: "Demasiadas contraseñas incorrectas para este correo. Inténtalo de nuevo en 15 minutos, o usa el enlace por correo o restablece tu contraseña.",
       confirmTitle: "¿Restablecer la contraseña de esta cuenta?",
       confirmBody: "Este enlace de restablecimiento es para {email}. Continúa solo si esa es tu cuenta.",
       confirmContinue: "Continuar como {email}",

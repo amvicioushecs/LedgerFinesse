@@ -20,7 +20,7 @@ import type { Locale } from "@/lib/i18n/locales";
 import { MOCK_WEBHOOK_SECRET, MockCheckoutGateway, MockRefundGateway, mockStripe } from "@/lib/payments/mock-gateway";
 import { createStripeClient, StripeCheckoutGateway, StripeRefundGateway } from "@/lib/payments/stripe-gateway";
 import type { CheckoutGateway, RefundGateway } from "@/lib/payments/types";
-import { MemoryRateLimitStore, clientIp, isRateLimited, type RateLimitStore, type RateLimitedAction } from "@/lib/rate-limit";
+import { MemoryRateLimitStore, clientIp, isRateLimited, passwordFailureGuard, type RateLimitStore, type RateLimitedAction } from "@/lib/rate-limit";
 import type Stripe from "stripe";
 
 export interface CurrentUser {
@@ -217,7 +217,8 @@ function devPasswordProvider(env: ServerEnv): PasswordAuthProvider {
 export async function passwordDeps(request: Request) {
   const env = serverEnv();
   const provider = env.backend === "memory" ? devPasswordProvider(env) : new SupabasePasswordProvider(await supabaseForRequest(env));
-  return { provider, rateLimited: (subject: string) => rateLimited(request, "signin", subject), appUrl: env.appUrl };
+  const passwordFailures = passwordFailureGuard({ store: rateLimitStore(env), limit: env.passwordFailureLimit, failOpen: env.siteEnv === "development" });
+  return { provider, rateLimited: (subject: string) => rateLimited(request, "signin", subject), passwordFailures, appUrl: env.appUrl };
 }
 
 export async function signOut(): Promise<void> {
@@ -288,6 +289,10 @@ function rateLimitStore(env: ServerEnv): RateLimitStore {
       const { data, error } = await admin.rpc("rate_limit_hit", { p_keys: keys, p_limit: limit, p_window_seconds: windowSeconds });
       if (error) throw new Error(`rate_limit_hit: ${error.message}`);
       return data === true;
+    },
+    async forgive(keys, windowSeconds) {
+      const { error } = await admin.rpc("rate_limit_forgive", { p_keys: keys, p_window_seconds: windowSeconds });
+      if (error) throw new Error(`rate_limit_forgive: ${error.message}`);
     },
   };
 }

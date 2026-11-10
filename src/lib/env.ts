@@ -4,7 +4,7 @@
  * non-production refuses live Stripe keys.
  */
 
-import { DEFAULT_IP_RATE_LIMIT, DEFAULT_RATE_LIMITS, type RateLimit, type RateLimits } from "@/lib/rate-limit";
+import { DEFAULT_IP_RATE_LIMIT, DEFAULT_PASSWORD_FAILURE_LIMIT, DEFAULT_RATE_LIMITS, type RateLimit, type RateLimits } from "@/lib/rate-limit";
 
 export interface ServerEnv {
   siteEnv: "development" | "preview" | "production";
@@ -23,6 +23,8 @@ export interface ServerEnv {
   rateLimits: RateLimits;
   /** Loose per-IP limit; applies only with trustedIpHeader. */
   ipRateLimit: RateLimit;
+  /** Wrong passwords allowed per sign-in email per window. */
+  passwordFailureLimit: RateLimit;
   /** Lower-case header name the host sets with the client IP; null (default) turns per-IP limits off. */
   trustedIpHeader: string | null;
 }
@@ -110,6 +112,7 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     checkout: parseLimit("LF_RATE_LIMIT_CHECKOUT", raw.LF_RATE_LIMIT_CHECKOUT, DEFAULT_RATE_LIMITS.checkout),
   };
   const ipRateLimit = parseLimit("LF_RATE_LIMIT_IP", raw.LF_RATE_LIMIT_IP, DEFAULT_IP_RATE_LIMIT);
+  const passwordFailureLimit = parseLimit("LF_PASSWORD_FAILURE_LIMIT", raw.LF_PASSWORD_FAILURE_LIMIT, DEFAULT_PASSWORD_FAILURE_LIMIT);
   const trustedIpHeader = raw.LF_TRUSTED_IP_HEADER?.trim().toLowerCase() || null;
   if (trustedIpHeader && !/^[a-z0-9-]+$/.test(trustedIpHeader)) errors.push("LF_TRUSTED_IP_HEADER must be a header name, e.g. x-real-ip");
 
@@ -127,6 +130,7 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     dailyAuditLimit,
     rateLimits,
     ipRateLimit,
+    passwordFailureLimit,
     trustedIpHeader,
   };
 }

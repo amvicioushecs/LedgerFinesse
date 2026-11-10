@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_IP_RATE_LIMIT, DEFAULT_RATE_LIMITS, MemoryRateLimitStore, clientIp, isRateLimited, type RateLimitStore } from "@/lib/rate-limit";
+import {
+  DEFAULT_IP_RATE_LIMIT, DEFAULT_PASSWORD_FAILURE_LIMIT, DEFAULT_RATE_LIMITS, MemoryRateLimitStore, clientIp, isRateLimited, passwordFailureGuard,
+  type RateLimitStore,
+} from "@/lib/rate-limit";
 
 const limits = DEFAULT_RATE_LIMITS;
 
@@ -16,7 +19,7 @@ describe("isRateLimited (fixed window, Postgres in deployed envs)", () => {
     let now = 0;
     const store = new MemoryRateLimitStore(() => now);
     const hits: [string[], number][] = [];
-    const spy: RateLimitStore = { hit: (keys, limit, window) => (hits.push([keys, limit]), store.hit(keys, limit, window)) };
+    const spy: RateLimitStore = { hit: (keys, limit, window) => (hits.push([keys, limit]), store.hit(keys, limit, window)), forgive: (k, w) => store.forgive(k, w) };
     const deps = { store: spy, limits: { ...limits, upload: { limit: 2, windowSeconds: 60 } }, ipLimit: { limit: 2, windowSeconds: 60 }, failOpen: false };
     const check = (ip: string | null, subject: string) => isRateLimited(deps, "upload", { ip, subject });
     expect(await check("1.2.3.4", "user-a")).toBe(false);
@@ -33,7 +36,7 @@ describe("isRateLimited (fixed window, Postgres in deployed envs)", () => {
 
   it("with no trusted IP (the default) only the per-user key counts", async () => {
     const hit = vi.fn(async () => false);
-    await isRateLimited({ store: { hit }, limits, ipLimit: DEFAULT_IP_RATE_LIMIT, failOpen: false }, "signin", { ip: null, subject: "a@x.co" });
+    await isRateLimited({ store: { hit, forgive: async () => {} }, limits, ipLimit: DEFAULT_IP_RATE_LIMIT, failOpen: false }, "signin", { ip: null, subject: "a@x.co" });
     expect(hit).toHaveBeenCalledTimes(1);
     expect(hit).toHaveBeenCalledWith(["signin:subject:a@x.co"], 10, 60);
   });
@@ -44,7 +47,7 @@ describe("isRateLimited (fixed window, Postgres in deployed envs)", () => {
 
   it("fails closed when the limiter is unreachable outside development", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const broken: RateLimitStore = { hit: async () => { throw new Error("db down"); } };
+    const broken: RateLimitStore = { hit: async () => { throw new Error("db down"); }, forgive: async () => {} };
     expect(await isRateLimited({ store: broken, limits, ipLimit: DEFAULT_IP_RATE_LIMIT, failOpen: false }, "signin", { ip: null, subject: "a@x.co" })).toBe(true);
     expect(error).toHaveBeenCalledWith(expect.stringContaining("rate limiter unreachable"));
     error.mockRestore();
@@ -52,7 +55,7 @@ describe("isRateLimited (fixed window, Postgres in deployed envs)", () => {
 
   it("fails open only in development", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const broken: RateLimitStore = { hit: async () => { throw new Error("db down"); } };
+    const broken: RateLimitStore = { hit: async () => { throw new Error("db down"); }, forgive: async () => {} };
     expect(await isRateLimited({ store: broken, limits, ipLimit: DEFAULT_IP_RATE_LIMIT, failOpen: true }, "signin", { ip: null, subject: "a@x.co" })).toBe(false);
     error.mockRestore();
   });
@@ -78,5 +81,41 @@ describe("clientIp: only a header we are configured to trust", () => {
   it("ignores values that are not an IP address, so junk can't mint new keys", () => {
     expect(clientIp(new Headers({ "x-real-ip": "x".repeat(500) }), "x-real-ip")).toBeNull();
     expect(clientIp(new Headers({ "x-real-ip": "1.2.3.4; drop" }), "x-real-ip")).toBeNull();
+  });
+});
+
+describe("passwordFailureGuard: 5 wrong passwords per email per 15 minutes", () => {
+  it("defaults to 5 per 900 seconds", () => {
+    expect(DEFAULT_PASSWORD_FAILURE_LIMIT).toEqual({ limit: 5, windowSeconds: 900 });
+  });
+
+  it("reserves a failure before the attempt and forgives it when the attempt was not a wrong password", async () => {
+    const store = new MemoryRateLimitStore(() => 0);
+    const guard = passwordFailureGuard({ store, limit: DEFAULT_PASSWORD_FAILURE_LIMIT, failOpen: false });
+    // Successful sign-ins don't use up the allowance.
+    for (let i = 0; i < 20; i++) {
+      expect(await guard.reserve("a@x.co")).toBe(false);
+      await guard.forgive("a@x.co");
+    }
+    // Five wrong passwords are allowed; the sixth attempt is refused before the provider is asked.
+    for (let i = 0; i < 5; i++) expect(await guard.reserve("a@x.co")).toBe(false);
+    expect(await guard.reserve("a@x.co")).toBe(true);
+    expect(await guard.reserve("b@x.co")).toBe(false);
+  });
+
+  it("counts concurrent attempts atomically (reserve first), so parallel guesses can't all slip through", async () => {
+    const store = new MemoryRateLimitStore(() => 0);
+    const guard = passwordFailureGuard({ store, limit: DEFAULT_PASSWORD_FAILURE_LIMIT, failOpen: false });
+    const results = await Promise.all(Array.from({ length: 50 }, () => guard.reserve("a@x.co")));
+    expect(results.filter((locked) => !locked)).toHaveLength(5);
+  });
+
+  it("fails closed when the limiter is unreachable, except in development", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const broken: RateLimitStore = { hit: async () => { throw new Error("db down"); }, forgive: async () => { throw new Error("db down"); } };
+    expect(await passwordFailureGuard({ store: broken, limit: DEFAULT_PASSWORD_FAILURE_LIMIT, failOpen: false }).reserve("a@x.co")).toBe(true);
+    expect(await passwordFailureGuard({ store: broken, limit: DEFAULT_PASSWORD_FAILURE_LIMIT, failOpen: true }).reserve("a@x.co")).toBe(false);
+    await passwordFailureGuard({ store: broken, limit: DEFAULT_PASSWORD_FAILURE_LIMIT, failOpen: false }).forgive("a@x.co");
+    error.mockRestore();
   });
 });

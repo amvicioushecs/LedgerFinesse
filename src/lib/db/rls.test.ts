@@ -199,6 +199,17 @@ describe("rate_limit_hit (fixed-window limiter)", () => {
     expect(await hit(["upload:ip:1"], 1, "2026-11-10T08:01:00Z")).toBe(false);
   });
 
+  it("rate_limit_forgive takes one hit back in the current window, never below zero and never creating a row", async () => {
+    const forgive = (keys: string[], at = "2026-11-10T08:00:05Z") =>
+      as("service_role", null, () => rows("select public.rate_limit_forgive($1::text[], 900, $2::timestamptz)", [keys, at]));
+    expect(await hit(["password_fail:subject:a"], 5)).toBe(false);
+    await forgive(["password_fail:subject:a"]);
+    await forgive(["password_fail:subject:a"]);
+    await forgive(["password_fail:subject:nobody"]);
+    expect(await rows("select bucket, hits from public.rate_limits order by bucket")).toEqual([{ bucket: "password_fail:subject:a", hits: 0 }]);
+    await expect(as("authenticated", A, () => rows("select public.rate_limit_forgive(array['x'], 60, now())"))).rejects.toThrow(/permission denied/);
+  });
+
   it("is server-only: no renter can call it or read the table", async () => {
     await expect(as("authenticated", A, () => rows("select public.rate_limit_hit(array['x'], 1, 60, now())"))).rejects.toThrow(/permission denied/);
     await expect(as("anon", null, () => rows("select public.rate_limit_hit(array['x'], 1, 60, now())"))).rejects.toThrow(/permission denied/);

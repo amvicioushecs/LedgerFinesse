@@ -20,10 +20,12 @@ interface Deps {
   provider: PasswordAuthProvider;
   /** Same limiter and keys as the magic link: "signin" action, per IP and per subject. */
   rateLimited: (subject: string) => Promise<boolean>;
+  /** Per-email wrong-password limit (5 per 15 minutes by default): reserve before, forgive unless the password was wrong. */
+  passwordFailures: { reserve(email: string): Promise<boolean>; forgive(email: string): Promise<void> };
   appUrl: string;
 }
 
-export type PasswordStatus = "error" | "weak" | "rate" | "invalid" | "unconfirmed" | "confirm";
+export type PasswordStatus = "error" | "weak" | "rate" | "locked" | "invalid" | "unconfirmed" | "confirm";
 export type PasswordResult = { kind: "redirect"; to: string } | { kind: "back"; status: PasswordStatus; next: string };
 
 const validEmail = (email: string) => email.length <= 320 && EMAIL.test(email);
@@ -49,7 +51,10 @@ export async function passwordSignIn(
   if (await deps.rateLimited(email.toLowerCase())) return back("rate");
 
   if (input.intent === "signin") {
+    const subject = email.toLowerCase();
+    if (await deps.passwordFailures.reserve(subject)) return back("locked");
     const result = await deps.provider.signIn(email, input.password);
+    if (result !== "invalid") await deps.passwordFailures.forgive(subject);
     return result === "ok" ? { kind: "redirect", to: next } : back(result);
   }
   const result = await deps.provider.signUp(email, input.password, callbackUrl(deps.appUrl, input.locale, next));

@@ -88,6 +88,12 @@ describe("parseServerEnv", () => {
     expect(() => parseServerEnv({ LF_RATE_LIMIT_IP: "many" })).toThrow(/LF_RATE_LIMIT_IP must look like 100\/60/);
   });
 
+  it("reads the per-email wrong-password limit (default 5 per 15 minutes)", () => {
+    expect(parseServerEnv({}).passwordFailureLimit).toEqual({ limit: 5, windowSeconds: 900 });
+    expect(parseServerEnv({ LF_PASSWORD_FAILURE_LIMIT: "3/600" }).passwordFailureLimit).toEqual({ limit: 3, windowSeconds: 600 });
+    expect(() => parseServerEnv({ LF_PASSWORD_FAILURE_LIMIT: "x" })).toThrow(/LF_PASSWORD_FAILURE_LIMIT must look like 5\/900/);
+  });
+
   it("refuses live Stripe keys outside production", () => {
     expect(() => parseServerEnv({ STRIPE_MODE: "stripe", STRIPE_SECRET_KEY: "sk_live_1", STRIPE_WEBHOOK_SECRET: "whsec_1" })).toThrow(/live Stripe key/);
     expect(() => parseServerEnv({ STRIPE_MODE: "stripe", STRIPE_SECRET_KEY: "rk_live_1", STRIPE_WEBHOOK_SECRET: "whsec_1" })).toThrow(/live Stripe key/);
