@@ -4,6 +4,8 @@ import type { CheckoutGateway, CheckoutSessionInfo, CheckoutSessionInput, Refund
 
 /** Pinned so a dashboard upgrade can't change payload shapes under us. Matches stripe@23.1.0. */
 export const STRIPE_API_VERSION = "2026-10-28.endive";
+/** Per request (SDK default is 80s). Keeps a slow Stripe call well inside a Worker request. */
+export const STRIPE_TIMEOUT_MS = 10_000;
 
 export function createStripeClient(secretKey: string): Stripe {
   return new Stripe(secretKey, {
@@ -11,6 +13,7 @@ export function createStripeClient(secretKey: string): Stripe {
     // fetch + SubtleCrypto work on Cloudflare Workers (no Node http).
     httpClient: Stripe.createFetchHttpClient(),
     maxNetworkRetries: 2,
+    timeout: STRIPE_TIMEOUT_MS,
     appInfo: { name: "LedgerFinesse" },
   });
 }
