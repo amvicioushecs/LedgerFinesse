@@ -220,7 +220,8 @@ begin
       v_outcome := 'duplicate_payment';
     elsif v_audit.status <> 'preview_ready' then
       v_outcome := 'not_unlockable';
-    elsif p_currency <> 'usd' or p_amount_cents <> v_audit.fee_cents or p_amount_cents <> v_payment.amount_cents then
+    elsif p_currency is distinct from 'usd' or p_amount_cents is distinct from v_audit.fee_cents
+          or p_amount_cents is distinct from v_payment.amount_cents then
       v_outcome := 'amount_mismatch';
     else
       update public.audits set status = 'unlocked', unlocked_at = now() where id = v_audit.id;

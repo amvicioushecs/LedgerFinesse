@@ -133,6 +133,22 @@ describe("apply_checkout_paid", () => {
     await expect(as("authenticated", A, () => rows("select public.record_refund('evt_7', 're_x')"))).rejects.toThrow(/permission denied/);
   });
 
+  it("never unlocks on a missing currency (NULL-safe comparisons)", async () => {
+    const call = (eventId: string, amount: number | null, currency: string | null) =>
+      as("service_role", null, async () =>
+        (await rows(`select public.apply_checkout_paid($1, 'checkout.session.completed', 'cs_test_a', $2, $3, $4, 'pi_null') as r`,
+          [eventId, AUDIT_A, amount, currency]))[0].r as string);
+    expect(await call("evt_n1", 9600, null)).toBe("amount_mismatch");
+    expect((await rows("select status from public.audits where id = $1", [AUDIT_A]))[0].status).toBe("preview_ready");
+  });
+
+  it("never unlocks on a missing amount", async () => {
+    const r = await as("service_role", null, async () =>
+      (await rows(`select public.apply_checkout_paid('evt_n2', 'checkout.session.completed', 'cs_test_a', $1, null, 'usd', 'pi_null2') as r`, [AUDIT_A]))[0].r);
+    expect(r).toBe("amount_mismatch");
+    expect((await rows("select status from public.audits where id = $1", [AUDIT_A]))[0].status).toBe("preview_ready");
+  });
+
   it("flags an unknown session", async () => {
     expect(await pay("evt_8", "cs_test_nope", AUDIT_A, 9600)).toBe("unknown_session");
     expect(await rows("select event_id, reason, checkout_session_id from public.payment_reviews")).toEqual([
