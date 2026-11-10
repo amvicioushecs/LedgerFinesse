@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { fill, getDictionary } from "@/content/dictionaries";
+import { feeGateCopy } from "@/content/fee-copy";
 import { WaitForStatus } from "@/components/audit/wait-for-status";
 import { Disclaimer } from "@/components/disclaimer";
 import { ReportView } from "@/components/report/report-view";
@@ -100,6 +101,7 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
 
   const total = formatUsd(summary.totalOwedCents);
   const fee = formatUsd(decision.feeCents);
+  const feeGate = feeGateCopy(r, decision);
   const net = formatUsd(summary.totalOwedCents - decision.feeCents);
   const checkout = typeof query.checkout === "string" ? query.checkout : null;
 
@@ -156,9 +158,9 @@ async function AuditContent({ locale, params, searchParams }: { locale: Locale; 
       {checkout === "unavailable" ? <p role="alert" className="mt-6 rounded-md bg-butter p-3 text-sm font-semibold text-alert">{getDictionary(locale).common.unavailable}</p> : null}
 
       <section className="mt-6 rounded-lg border-2 border-forest p-6" data-testid="fee-gate">
-        <h2 className="font-display text-2xl font-bold">{decision.minimumApplied ? fill(r.feeTitleMinimum, { fee }) : r.feeTitle}</h2>
-        <p className="mt-2" data-testid="fee-line">{fill(decision.minimumApplied ? r.feeLineMinimum : r.feeLine, { fee, total })}</p>
-        {decision.minimumApplied ? (
+        <h2 className="font-display text-2xl font-bold">{fill(feeGate.title, { fee })}</h2>
+        <p className="mt-2" data-testid="fee-line">{fill(feeGate.line, { fee, total })}</p>
+        {feeGate.minimumNote ? (
           <p role="note" className="mt-3 rounded-md border-2 border-gold bg-butter p-3 text-sm font-semibold" data-testid="fee-minimum-note">{r.feeMinimumNote}</p>
         ) : null}
         <p className="mt-1 text-sm text-muted">{fill(r.keep, { net, total })}</p>
