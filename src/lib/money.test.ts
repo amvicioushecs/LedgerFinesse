@@ -30,9 +30,9 @@ describe("percentOfCents", () => {
 });
 
 describe("formatUsd", () => {
-  it("formats integer cents as US dollars in both locales", () => {
-    expect(formatUsd(64000, "en")).toBe("$640.00");
-    expect(formatUsd(9600, "es")).toBe("$96.00");
-    expect(formatUsd(123456789, "en")).toBe("$1,234,567.89");
+  it("formats integer cents as US dollars (same style in EN and ES)", () => {
+    expect(formatUsd(64000)).toBe("$640.00");
+    expect(formatUsd(9600)).toBe("$96.00");
+    expect(formatUsd(123456789)).toBe("$1,234,567.89");
   });
 });
