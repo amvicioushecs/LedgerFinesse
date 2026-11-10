@@ -7,7 +7,8 @@ import type { AuditDeps } from "@/lib/audits/service";
 import { SupabaseAuditRepository, SupabaseDocumentStore } from "@/lib/audits/supabase-repository";
 import type { AuditRepository, Extractor } from "@/lib/audits/types";
 import {
-  RECOVERY_PENDING_COOKIE, RECOVERY_PENDING_MAX_AGE, decodeHeld, encodeHeld, type CallbackDeps, type HeldSession, type RecoveryConfirmDeps,
+  RECOVERY_PENDING_COOKIE, RECOVERY_PENDING_MAX_AGE, decodeHeld, encodeHeld, heldSessionExpired,
+  type CallbackDeps, type HeldSession, type RecoveryConfirmDeps,
 } from "@/lib/auth/callback";
 import { DEV_SESSION_COOKIE, signDevSession, verifyDevSession } from "@/lib/auth/dev-session";
 import { MemoryPasswordProvider } from "@/lib/auth/memory-password";
@@ -116,6 +117,11 @@ export async function pendingRecoveryEmail(): Promise<string | null> {
   const env = serverEnv();
   const held = env.backend === "memory" ? null : await heldRecovery();
   if (!held) return null;
+  if (heldSessionExpired(held, Math.floor(Date.now() / 1000))) {
+    (await cookies()).delete(RECOVERY_PENDING_COOKIE);
+    await recoveryConfirmDeps().revoke(held);
+    return null;
+  }
   const { data, error } = await supabaseDetached(env).auth.getUser(held.accessToken);
   return error ? null : (data.user?.email ?? null);
 }

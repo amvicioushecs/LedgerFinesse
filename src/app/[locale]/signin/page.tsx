@@ -27,8 +27,9 @@ async function SignInForm({ locale, searchParams }: { locale: Locale; searchPara
   const p = t.signup.password;
   const passwordStatus: Record<string, string> = {
     invalid: p.invalid, locked: p.locked, reauth: p.reauth, unconfirmed: p.unconfirmed, weak: fill(p.weak, { min: PASSWORD_MIN_LENGTH }), confirm: p.confirmSent,
-    reset_sent: p.resetSent, expired: p.expired, recovery_cancelled: p.confirmCancelled,
+    reset_sent: p.resetSent, expired: p.expired, confirmed_signin: p.confirmedSignIn, recovery_cancelled: p.confirmCancelled,
   };
+  const statusIsNotice = status === "confirm" || status === "reset_sent" || status === "confirmed_signin" || status === "recovery_cancelled";
   const inputClass = "mt-1 block w-full rounded-md border border-line px-3 py-3 text-base";
   return (
     <div className="space-y-8">
@@ -64,8 +65,8 @@ async function SignInForm({ locale, searchParams }: { locale: Locale; searchPara
           <span className="mt-1 block text-xs text-muted">{fill(p.hint, { min: PASSWORD_MIN_LENGTH })}</span>
         </label>
         {status && passwordStatus[status] ? (
-          <p role={status === "confirm" || status === "reset_sent" || status === "recovery_cancelled" ? "status" : "alert"} data-testid="password-status"
-            className={status === "confirm" || status === "reset_sent" || status === "recovery_cancelled" ? "rounded-md bg-mint p-3 text-sm font-semibold" : "text-sm font-semibold text-alert"}>
+          <p role={statusIsNotice ? "status" : "alert"} data-testid="password-status"
+            className={statusIsNotice ? "rounded-md bg-mint p-3 text-sm font-semibold" : "text-sm font-semibold text-alert"}>
             {passwordStatus[status]}
           </p>
         ) : null}
