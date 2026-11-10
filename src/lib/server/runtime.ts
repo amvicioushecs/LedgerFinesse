@@ -68,7 +68,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   const env = serverEnv();
   if (env.backend === "memory") {
     const token = (await cookies()).get(DEV_SESSION_COOKIE)?.value;
-    return verifyDevSession(token, env.devSessionSecret);
+    return verifyDevSession(token, devSecret(env));
   }
   const supabase = await supabaseForRequest(env);
   const { data } = await supabase.auth.getUser();
@@ -77,11 +77,16 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
 export type SignInResult = { kind: "email_sent" } | { kind: "signed_in" } | { kind: "error" };
 
+function devSecret(env: ServerEnv): string {
+  if (!env.devSessionSecret) throw new Error("dev sessions are development-only");
+  return env.devSessionSecret;
+}
+
 /** Email magic link (Supabase) or, for the local memory backend, an immediate dev session. */
 export async function startEmailSignIn(email: string, nextPath: string, locale: Locale): Promise<SignInResult> {
   const env = serverEnv();
   if (env.backend === "memory") {
-    (await cookies()).set(DEV_SESSION_COOKIE, await signDevSession(email, env.devSessionSecret), {
+    (await cookies()).set(DEV_SESSION_COOKIE, await signDevSession(email, devSecret(env)), {
       httpOnly: true,
       sameSite: "lax",
       secure: env.appUrl.startsWith("https://"),

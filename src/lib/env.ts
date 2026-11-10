@@ -12,8 +12,8 @@ export interface ServerEnv {
   supabase: { url: string; anonKey: string; serviceRoleKey: string } | null;
   stripe: { secretKey: string; webhookSecret: string } | null;
   gemini: { apiKey: string; model: string } | null;
-  /** Signs local dev sessions when backend=memory. */
-  devSessionSecret: string;
+  /** Signs local dev sessions (backend=memory, development only). Null everywhere else: no fallback secret. */
+  devSessionSecret: string | null;
 }
 
 type Raw = Record<string, string | undefined>;
@@ -49,9 +49,11 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     ].filter(Boolean);
     if (shortcuts.length > 0) errors.push(`production refuses ${shortcuts.join(", ")}`);
     if (!appUrl.startsWith("https://")) errors.push("NEXT_PUBLIC_APP_URL must be https in production");
-  } else if (siteEnv !== "development" && stripeMode === "mock") {
+  } else if (siteEnv !== "development") {
     // The mock webhook secret is in the public repo: anyone could sign a "paid" event.
-    errors.push("STRIPE_MODE=mock is only allowed in SITE_ENV=development");
+    if (stripeMode === "mock") errors.push("STRIPE_MODE=mock is only allowed in SITE_ENV=development");
+    // Memory-backend sign-in issues a session for any typed email, without verification.
+    if (backend === "memory") errors.push("LF_BACKEND=memory is only allowed in SITE_ENV=development");
   }
 
   const supabase =
@@ -80,7 +82,7 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     supabase,
     stripe,
     gemini,
-    devSessionSecret: raw.DEV_SESSION_SECRET?.trim() || "local-dev-only-not-a-secret",
+    devSessionSecret: siteEnv === "development" ? raw.DEV_SESSION_SECRET?.trim() || "local-dev-only-not-a-secret" : null,
   };
 }
 

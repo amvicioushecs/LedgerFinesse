@@ -16,12 +16,12 @@ With no env set, the app runs fully local. It uses an in-memory store, a dev sig
 
 | Variable | Values | Notes |
 |---|---|---|
-| `SITE_ENV` | `development` \| `staging` \| `production` | `production` refuses the memory store, mock Stripe and demo extraction; anything else refuses live Stripe keys. Non-production pages are `noindex` and robots disallows all. |
+| `SITE_ENV` | `development` \| `preview` \| `production` | The memory store and mock Stripe are development-only. Production also refuses demo extraction. Anything but production refuses live Stripe keys. Non-production pages are `noindex` and robots disallows all. |
 | `LF_BACKEND` | `memory` \| `supabase` | `supabase` needs `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` |
 | `STRIPE_MODE` | `mock` \| `stripe` | `stripe` needs `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` |
 | `EXTRACTION_MODE` | `demo` \| `gemini` | `gemini` needs `GEMINI_API_KEY`; `GEMINI_MODEL` is optional |
 | `NEXT_PUBLIC_APP_URL` | absolute origin | Used for Checkout return URLs, the magic-link redirect, canonical URLs and the sitemap |
-| `DEV_SESSION_SECRET` | string | Signs the dev sign-in cookie (memory backend only) |
+| `DEV_SESSION_SECRET` | string | Signs the dev sign-in cookie (memory backend, development only; ignored elsewhere) |
 
 ## Supabase
 - Migration: `supabase/migrations/20261109000000_site_v1.sql` (tables, RLS, private `documents` bucket, `save_scan_result` and `apply_checkout_paid`). Apply it to a non-production project first: `supabase db push --db-url <staging url>`.

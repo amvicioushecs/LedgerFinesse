@@ -35,6 +35,17 @@ describe("parseServerEnv", () => {
     expect(stripeWebhookEnabled({ stripeMode: "mock", siteEnv: "production" })).toBe(false);
   });
 
+  it("allows the memory backend (sign-in without email verification) only in development", () => {
+    expect(() => parseServerEnv({ SITE_ENV: "preview", STRIPE_MODE: "stripe", ...stripe })).toThrow(/LF_BACKEND=memory is only allowed in SITE_ENV=development/);
+  });
+
+  it("uses the dev-session fallback secret only in development and never outside it", () => {
+    expect(parseServerEnv({}).devSessionSecret).toBe("local-dev-only-not-a-secret");
+    expect(parseServerEnv({ DEV_SESSION_SECRET: "s3cret" }).devSessionSecret).toBe("s3cret");
+    const preview = parseServerEnv({ SITE_ENV: "preview", LF_BACKEND: "supabase", STRIPE_MODE: "stripe", ...supabase, ...stripe });
+    expect(preview.devSessionSecret).toBeNull();
+  });
+
   it("refuses live Stripe keys outside production", () => {
     expect(() => parseServerEnv({ STRIPE_MODE: "stripe", STRIPE_SECRET_KEY: "sk_live_1", STRIPE_WEBHOOK_SECRET: "whsec_1" })).toThrow(/live Stripe key/);
     expect(() => parseServerEnv({ STRIPE_MODE: "stripe", STRIPE_SECRET_KEY: "rk_live_1", STRIPE_WEBHOOK_SECRET: "whsec_1" })).toThrow(/live Stripe key/);
