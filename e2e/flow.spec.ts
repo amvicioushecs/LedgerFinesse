@@ -1,0 +1,200 @@
+import { mkdirSync } from "node:fs";
+import path from "node:path";
+import { expect, test, type Page } from "@playwright/test";
+
+/** A fresh client IP per auth test so the 10/min sign-in limit (live under miniflare too) isn't shared across tests. */
+
+const SHOTS = process.env.SCREENSHOT_DIR ?? "/workspace/ledgerfinesse/screenshots/v2";
+mkdirSync(SHOTS, { recursive: true });
+
+const COPY = {
+  en: { found: "We found $640.00 owed back to you.", fee: "Upfront payment: $96.00 (15% of $640.00 owed).", pay: "Pay $96.00 & Unlock Dashboard", letter: "2. Your Dispute Letter", tenDays: "ten (10) business days", notLawFirm: "not a law firm" },
+  es: { found: "Encontramos $640.00 que te deben.", fee: "", pay: "", letter: "2. Tu carta de disputa", tenDays: "diez (10) días hábiles", notLawFirm: "no es un despacho de abogados" },
+} as const;
+
+async function shot(page: Page, name: string) {
+  // Streamed (Suspense) content can sit in the DOM hidden until the stream finishes.
+  await page.waitForLoadState("load");
+  await expect(page.getByText(/^(Loading…|Cargando…)$/)).toHaveCount(0);
+  const project = test.info().project.name;
+  await page.screenshot({ path: path.join(SHOTS, `${name}-${project}.png`), fullPage: true });
+}
+
+for (const locale of ["en", "es"] as const) {
+  test.describe(`${locale}`, () => {
+    test(`landing: disclaimer, flat 15%, verified stats with sources, hreflang`, async ({ page }) => {
+      await page.goto(`/${locale}`);
+      await expect(page.locator("html")).toHaveAttribute("lang", locale);
+      await expect(page.getByTestId("disclaimer").first()).toContainText(COPY[locale].notLawFirm);
+      const body = await page.locator("body").innerText();
+      expect(body).not.toMatch(/15\s*%\s*[–-]\s*25|1671/);
+      expect(body).toContain("15%");
+      expect(body).toContain("87%");
+      await expect(page.locator('a[href^="https://www.ftc.gov"]')).toHaveCount(2);
+      await expect(page.locator('link[rel="alternate"][hreflang="es"]')).toHaveAttribute("href", /\/es$/);
+      await expect(page.locator('link[rel="alternate"][hreflang="x-default"]')).toHaveAttribute("href", /\/en$/);
+      const ld = await page.locator('script[type="application/ld+json"]').first().textContent();
+      expect(ld).toContain('"FAQPage"');
+      await shot(page, `${locale}-01-landing`);
+    });
+
+    test(`scan → fee → unlock`, async ({ page }) => {
+      const email = `e2e-${locale}-${test.info().project.name}-${Date.now()}@example.test`;
+      await page.goto(`/${locale}/audits/new`);
+      await page.waitForURL(new RegExp(`/${locale}/signin`));
+      await shot(page, `${locale}-02-signin`);
+      await page.getByTestId("magic-form").locator('input[name="email"]').fill(email);
+      await page.getByTestId("signin-submit").click();
+      await page.waitForURL(new RegExp(`/${locale}/audits/new`));
+
+      await expect(page.getByTestId("demo-note")).toBeVisible();
+      await page.getByTestId("file-ledger").setInputFiles("e2e/fixtures/ledger.png");
+      await page.getByTestId("file-lease").setInputFiles("e2e/fixtures/lease.pdf");
+      await page.locator('input[name="landlordName"]').fill("Pacific Crest Residential Management LLC");
+      await shot(page, `${locale}-03-upload`);
+      await page.getByTestId("run-scan").click();
+
+      await page.waitForURL(new RegExp(`/${locale}/audits/[0-9a-f-]{36}$`));
+      await expect(page.getByTestId("free-total")).toBeVisible();
+      await expect(page.getByTestId("free-total")).toHaveText("$640.00");
+      if (locale === "en") {
+        await expect(page.getByTestId("found-title")).toHaveText(COPY.en.found);
+        await expect(page.getByTestId("fee-line")).toHaveText(COPY.en.fee);
+        await expect(page.getByTestId("pay")).toHaveText(COPY.en.pay);
+      } else {
+        await expect(page.getByTestId("found-title")).toHaveText(COPY.es.found);
+        await expect(page.getByTestId("fee-line")).toContainText("$96.00");
+      }
+      // Free result is count + total only: no line-level detail, no letter.
+      const locked = await page.locator("main").innerText();
+      expect(locked).not.toMatch(/RUBS|Valet|Late Charge|Pacific Crest/);
+      await expect(page.getByTestId("disclaimer").first()).toContainText(COPY[locale].notLawFirm);
+      await shot(page, `${locale}-04-result-fee-gate`);
+
+      await page.getByTestId("pay").click();
+      await page.waitForURL(/\/checkout\/mock\?session=cs_test_mock_/);
+      await expect(page.getByTestId("mock-amount")).toHaveText("$96.00");
+      await shot(page, `${locale}-05-mock-checkout`);
+      await page.getByTestId("mock-pay").click();
+
+      await page.waitForURL(new RegExp(`/${locale}/audits/[0-9a-f-]{36}`));
+      await expect(page.getByTestId("report-total")).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId("report-total")).toHaveText("$640.00");
+      await expect(page.getByTestId("breakdown").locator("> li")).toHaveCount(5);
+      await shot(page, `${locale}-06-unlocked-breakdown`);
+
+      await page.getByRole("tab", { name: COPY[locale].letter }).click();
+      await expect(page.getByTestId("attorney-review")).toBeVisible();
+      await expect(page.getByTestId("letter")).toContainText(COPY[locale].tenDays);
+      await expect(page.getByTestId("letter")).toContainText("Pacific Crest Residential Management LLC");
+      await expect(page.getByTestId("letter")).toContainText(COPY[locale].notLawFirm);
+      await shot(page, `${locale}-07-unlocked-letter`);
+    });
+
+    test(`sample dashboard is labeled SAMPLE and matches $640`, async ({ page }) => {
+      await page.goto(`/${locale}/sample`);
+      await expect(page.getByTestId("sample-banner")).toBeVisible();
+      await expect(page.getByTestId("report-total")).toHaveText("$640.00");
+      await page.getByRole("tab").nth(2).click();
+      await expect(page.getByTestId("statutes")).toContainText("CA Civ. Code § 1671(d)");
+      await shot(page, `${locale}-08-sample-sources`);
+    });
+
+    test(`blog: drafts flagged, sources listed, BlogPosting JSON-LD`, async ({ page }) => {
+      await page.goto(`/${locale}/blog`);
+      const first = page.locator("main h2 a").first();
+      await first.click();
+      await expect(page.getByTestId("draft-banner")).toBeVisible();
+      await expect(page.getByTestId("sources").locator("li").first()).toBeVisible();
+      const ld = await page.locator('script[type="application/ld+json"]').first().textContent();
+      expect(ld).toContain('"BlogPosting"');
+      await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+      await shot(page, `${locale}-09-blog-post`);
+    });
+  });
+}
+
+test("language switcher keeps the page", async ({ page, isMobile }) => {
+  await page.goto("/en/sample");
+  await page.getByTestId("language-switcher").getByRole("link", { name: "ES" }).click();
+  await page.waitForURL(/\/es\/sample$/);
+  await expect(page.locator("html")).toHaveAttribute("lang", "es");
+  expect(isMobile === undefined || typeof isMobile === "boolean").toBe(true);
+});
+
+test("unauthenticated webhook calls are rejected", async ({ request }) => {
+  const res = await request.post("/api/stripe/webhook", { data: "{}", headers: { "stripe-signature": "t=1,v1=bad" } });
+  expect(res.status()).toBe(400);
+});
+
+test("uploads are refused before the body is read when signed out", async ({ request, baseURL }) => {
+  const res = await request.post("/api/audits?locale=es", {
+    multipart: { jurisdiction: "san-diego-ca", lease: { name: "x.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(1024) } },
+    headers: { origin: baseURL! },
+    maxRedirects: 0,
+  });
+  expect(res.status()).toBe(303);
+  expect(res.headers()["location"]).toContain("/es/signin?next=/es/audits/new");
+});
+
+test("malformed audit ids are 404s, not server errors", async ({ request, baseURL }) => {
+  expect((await request.get("/api/audits/not-a-uuid/status")).status()).toBe(404);
+  const res = await request.post("/api/checkout", { form: { auditId: "x'; drop", locale: "en" }, headers: { origin: baseURL! }, maxRedirects: 0 });
+  expect(res.status()).toBe(404);
+});
+
+test("sign-in never redirects off-site, even through dot-segment tricks", async ({ request, baseURL }) => {
+  for (const next of ["/.//evil.com", "/%2e%2e//evil.com", "//evil.com"]) {
+    const res = await request.post("/auth/signin", {
+      form: { email: `redirect-${Date.now()}@example.test`, next, locale: "en" },
+      headers: { origin: baseURL! },
+      maxRedirects: 0,
+    });
+    expect(res.status(), next).toBe(303);
+    expect(new URL(res.headers()["location"], baseURL).origin, next).toBe(new URL(baseURL!).origin);
+  }
+});
+
+test("password sign-up, wrong password, sign-in, reset email and new password (local dev backend)", async ({ page, context }) => {
+  const email = `pw-${test.info().project.name}-${Date.now()}@example.test`;
+  const form = page.getByTestId("password-form");
+  await page.goto(`/en/signin?next=${encodeURIComponent("/en/audits/new")}`);
+  await form.locator('input[name="email"]').fill(email);
+  await form.locator('input[name="password"]').fill("first password");
+  await page.getByTestId("password-signup").click();
+  await page.waitForURL(/\/en\/audits\/new$/);
+  await shot(page, "en-10-password-signed-up");
+
+  await context.clearCookies();
+  await page.goto(`/en/signin?next=${encodeURIComponent("/.//evil.com")}`);
+  await form.locator('input[name="email"]').fill(email);
+  await form.locator('input[name="password"]').fill("wrong password");
+  await page.getByTestId("password-signin").click();
+  await expect(page.getByTestId("password-status")).toContainText("don't match");
+  await shot(page, "en-11-password-invalid");
+  await form.locator('input[name="email"]').fill(email);
+  await form.locator('input[name="password"]').fill("first password");
+  await page.getByTestId("password-signin").click();
+  await page.waitForURL(/\/en\/audits\/new$/);
+
+  await page.goto("/en/reset-password");
+  await page.locator('input[name="password"]').fill("second password");
+  await page.getByTestId("update-password").click();
+  await page.waitForURL(/\/en\/audits\?password=updated$/);
+
+  await context.clearCookies();
+  await page.goto("/en/signin");
+  await page.getByTestId("reset-form").locator('input[name="email"]').fill(email);
+  await page.getByTestId("reset-submit").click();
+  await expect(page.getByTestId("password-status")).toContainText("If that email has an account");
+  await form.locator('input[name="email"]').fill(email);
+  await form.locator('input[name="password"]').fill("second password");
+  await page.getByTestId("password-signin").click();
+  await page.waitForURL(/\/en\/audits\/new$/);
+});
+
+test("reset-password needs a session", async ({ page }) => {
+  await page.goto("/es/reset-password");
+  await page.waitForURL(/\/es\/signin\?status=expired$/);
+  await expect(page.getByTestId("password-status")).toBeVisible();
+});

@@ -1,3 +1,4 @@
+import { formatUsd } from "@/lib/money";
 import { describe, expect, it } from "vitest";
 import { assertCents, percentOfCents } from "@/lib/money";
 
@@ -25,5 +26,13 @@ describe("percentOfCents", () => {
 
   it("rejects non-integer basis points", () => {
     expect(() => percentOfCents(100, 12.5)).toThrow(RangeError);
+  });
+});
+
+describe("formatUsd", () => {
+  it("formats integer cents as US dollars (same style in EN and ES)", () => {
+    expect(formatUsd(64000)).toBe("$640.00");
+    expect(formatUsd(9600)).toBe("$96.00");
+    expect(formatUsd(123456789)).toBe("$1,234,567.89");
   });
 });

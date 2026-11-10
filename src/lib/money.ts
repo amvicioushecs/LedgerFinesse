@@ -21,3 +21,15 @@ export function percentOfCents(cents: number, basisPoints: number): number {
   assertCents(basisPoints, "basisPoints");
   return Math.floor((cents * basisPoints + 5000) / 10000);
 }
+
+/**
+ * US-dollar display for integer cents, "$1,234.56". Both locales use US number style
+ * because every amount is a US rent charge (Spanish-speaking US renters read "$1,234.56").
+ */
+export function formatUsd(cents: number): string {
+  assertCents(cents, "cents");
+  const dollars = Math.floor(cents / 100)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `$${dollars}.${String(cents % 100).padStart(2, "0")}`;
+}
