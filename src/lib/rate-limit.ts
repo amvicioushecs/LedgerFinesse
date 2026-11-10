@@ -42,17 +42,20 @@ interface Deps {
   failOpen: boolean;
 }
 
-/** True when the subject (user id, or sign-in email) or, if known from a trusted header, the IP is over its limit. */
-export async function isRateLimited(deps: Deps, action: RateLimitedAction, who: { ip: string | null; subject: string | null }): Promise<boolean> {
+/** "unavailable": the limiter could not be reached (outside development the request is refused, with its own message). */
+export type RateLimitOutcome = "ok" | "limited" | "unavailable";
+
+/** "limited" when the subject (user id, or sign-in email) or, if known from a trusted header, the IP is over its limit. */
+export async function checkRateLimit(deps: Deps, action: RateLimitedAction, who: { ip: string | null; subject: string | null }): Promise<RateLimitOutcome> {
   const { limit, windowSeconds } = deps.limits[action];
   const checks: Promise<boolean>[] = [];
   if (who.subject) checks.push(deps.store.hit([`${action}:subject:${who.subject}`], limit, windowSeconds));
   if (who.ip) checks.push(deps.store.hit([`${action}:ip:${who.ip}`], deps.ipLimit.limit, deps.ipLimit.windowSeconds));
   try {
-    return (await Promise.all(checks)).some(Boolean);
+    return (await Promise.all(checks)).some(Boolean) ? "limited" : "ok";
   } catch (error) {
     console.error(JSON.stringify({ msg: "rate limiter unreachable", action, failOpen: deps.failOpen, error: String(error) }));
-    return !deps.failOpen;
+    return deps.failOpen ? "ok" : "unavailable";
   }
 }
 
@@ -92,13 +95,13 @@ export class MemoryRateLimitStore implements RateLimitStore {
 export function passwordFailureGuard(deps: { store: RateLimitStore; limit: RateLimit; failOpen: boolean }) {
   const key = (email: string) => [`password_fail:subject:${email}`];
   return {
-    /** True when the email is locked out (or the limiter is unreachable outside development). */
-    async reserve(email: string): Promise<boolean> {
+    /** "limited" when the email is locked out; "unavailable" when the limiter is unreachable outside development. */
+    async reserve(email: string): Promise<RateLimitOutcome> {
       try {
-        return await deps.store.hit(key(email), deps.limit.limit, deps.limit.windowSeconds);
+        return (await deps.store.hit(key(email), deps.limit.limit, deps.limit.windowSeconds)) ? "limited" : "ok";
       } catch (error) {
         console.error(JSON.stringify({ msg: "rate limiter unreachable", action: "password_fail", failOpen: deps.failOpen, error: String(error) }));
-        return !deps.failOpen;
+        return deps.failOpen ? "ok" : "unavailable";
       }
     },
     async forgive(email: string): Promise<void> {

@@ -29,14 +29,14 @@ function fakeProvider(overrides: Partial<PasswordAuthProvider> = {}) {
   return { provider, calls };
 }
 
-const notLimited = async () => false;
-const noFailures = { reserve: async () => false, forgive: async () => {} };
+const notLimited = async () => "ok" as const;
+const noFailures = { reserve: async () => "ok" as const, forgive: async () => {} };
 const base = { email: "a@example.com", password: "correct horse", locale: "en" as const };
 
 describe("passwordSignIn: per-email wrong-password limit", () => {
-  function guard(locked = false) {
+  function guard(outcome: "ok" | "limited" | "unavailable" = "ok") {
     const log: string[] = [];
-    return { log, g: { reserve: async (e: string) => (log.push(`reserve:${e}`), locked), forgive: async (e: string) => void log.push(`forgive:${e}`) } };
+    return { log, g: { reserve: async (e: string) => (log.push(`reserve:${e}`), outcome), forgive: async (e: string) => void log.push(`forgive:${e}`) } };
   }
   const signIn = (provider: PasswordAuthProvider, passwordFailures: ReturnType<typeof guard>["g"]) =>
     passwordSignIn({ provider, rateLimited: notLimited, passwordFailures, appUrl: APP }, { ...base, email: "A@x.co", intent: "signin", next: "/en/audits" });
@@ -57,7 +57,20 @@ describe("passwordSignIn: per-email wrong-password limit", () => {
 
   it("over the limit: refused as locked without asking the provider", async () => {
     const { provider, calls } = fakeProvider();
-    expect(await signIn(provider, guard(true).g)).toEqual({ kind: "back", status: "locked", next: "/en/audits" });
+    expect(await signIn(provider, guard("limited").g)).toEqual({ kind: "back", status: "locked", next: "/en/audits" });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("limiter down: 'unavailable', not 'rate' or 'locked', and the provider is not asked", async () => {
+    const { provider, calls } = fakeProvider();
+    expect(await signIn(provider, guard("unavailable").g)).toEqual({ kind: "back", status: "unavailable", next: "/en/audits" });
+    const down = async () => "unavailable" as const;
+    expect(await passwordSignIn({ provider, rateLimited: down, passwordFailures: noFailures, appUrl: APP }, { ...base, intent: "signup", next: "/en/audits" }))
+      .toEqual({ kind: "back", status: "unavailable", next: "/en/audits" });
+    expect(await requestPasswordReset({ provider, rateLimited: down, passwordFailures: noFailures, appUrl: APP }, { email: "a@example.com", locale: "en" }))
+      .toEqual({ kind: "back", status: "unavailable" });
+    expect(await updatePassword({ provider, rateLimited: down, passwordFailures: noFailures, appUrl: APP }, { userId: "u1", password: "new password", locale: "en", mayChange: true }))
+      .toEqual({ kind: "back", status: "unavailable" });
     expect(calls).toHaveLength(0);
   });
 
@@ -87,7 +100,7 @@ describe("passwordSignIn", () => {
   it("rate limits per email (lower-cased) before calling the provider, like the magic link", async () => {
     const { provider, calls } = fakeProvider();
     const subjects: string[] = [];
-    const rateLimited = async (subject: string) => (subjects.push(subject), true);
+    const rateLimited = async (subject: string) => (subjects.push(subject), "limited" as const);
     expect(await passwordSignIn({ provider, rateLimited, passwordFailures: noFailures, appUrl: APP }, { ...base, email: "A@Example.com", intent: "signin", next: "/en/audits" }))
       .toEqual({ kind: "back", status: "rate", next: "/en/audits" });
     expect(subjects).toEqual(["a@example.com"]);
@@ -150,7 +163,7 @@ describe("requestPasswordReset", () => {
 
   it("is rate limited per email and validates the address", async () => {
     const { provider, calls } = fakeProvider();
-    expect(await requestPasswordReset({ provider, rateLimited: async () => true, passwordFailures: noFailures, appUrl: APP }, { email: "a@example.com", locale: "en" }))
+    expect(await requestPasswordReset({ provider, rateLimited: async () => "limited" as const, passwordFailures: noFailures, appUrl: APP }, { email: "a@example.com", locale: "en" }))
       .toEqual({ kind: "back", status: "rate" });
     expect(await requestPasswordReset({ provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP }, { email: "bad", locale: "en" }))
       .toEqual({ kind: "back", status: "error" });
@@ -165,7 +178,7 @@ describe("updatePassword", () => {
     const ok = { mayChange: true };
     expect(await updatePassword(deps, { userId: null, password: "new password", locale: "en", ...ok })).toEqual({ kind: "redirect", to: "/en/signin?status=expired" });
     expect(await updatePassword(deps, { userId: "u1", password: "short", locale: "en", ...ok })).toEqual({ kind: "back", status: "weak" });
-    expect(await updatePassword({ ...deps, rateLimited: async () => true }, { userId: "u1", password: "new password", locale: "en", ...ok })).toEqual({ kind: "back", status: "rate" });
+    expect(await updatePassword({ ...deps, rateLimited: async () => "limited" as const }, { userId: "u1", password: "new password", locale: "en", ...ok })).toEqual({ kind: "back", status: "rate" });
     expect(calls).toHaveLength(0);
     expect(await updatePassword(deps, { userId: "u1", password: "new password", locale: "en", ...ok })).toEqual({ kind: "redirect", to: "/en/audits?password=updated" });
     expect(calls).toEqual([{ method: "updatePassword", args: ["new password"] }]);

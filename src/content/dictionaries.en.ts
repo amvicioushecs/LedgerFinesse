@@ -298,7 +298,7 @@ export const en = {
     ctaTitle: "Check your own ledger",
     ctaBody: "Upload your ledger and lease. The scan is free; you pay 15% only if you're owed money.",
   },
-  common: { loading: "Loading…", backHome: "← Back to home", notFound: "Page not found", sampleLabel: "SAMPLE" },
+  common: { loading: "Loading…", backHome: "← Back to home", notFound: "Page not found", sampleLabel: "SAMPLE", unavailable: "This is temporarily unavailable. Please try again in a few minutes." },
 };
 
 export type Dictionary = typeof en;

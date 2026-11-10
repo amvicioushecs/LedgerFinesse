@@ -20,8 +20,9 @@ export async function POST(request: NextRequest) {
 
   const email = String(form.get("email") ?? "").trim();
   if (email.length > 320 || !EMAIL.test(email)) return back("error");
-  // Per IP and per address: stops magic-link email bombing of one inbox.
-  if (await rateLimited(request, "signin", email.toLowerCase())) return back("rate");
+  // Per address (and per IP from a trusted header): stops magic-link email bombing of one inbox.
+  const limit = await rateLimited(request, "signin", email.toLowerCase());
+  if (limit !== "ok") return back(limit === "limited" ? "rate" : "unavailable");
 
   const result = await startEmailSignIn(email, next, locale);
   if (result.kind === "signed_in") return NextResponse.redirect(new URL(next, request.url), 303);

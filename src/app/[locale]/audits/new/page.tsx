@@ -17,7 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t.upload.title, robots: PRIVATE_ROBOTS };
 }
 
-const ERRORS = { type: "errorType", size: "errorSize", missing: "missing", generic: "errorGeneric", rate: "errorRate", daily: "errorDaily" } as const;
+const ERRORS = { type: "errorType", size: "errorSize", missing: "missing", generic: "errorGeneric", rate: "errorRate", daily: "errorDaily", unavailable: "unavailable" } as const;
 
 async function Upload({ locale, searchParams }: { locale: Locale; searchParams: PageProps<"/[locale]/audits/new">["searchParams"] }) {
   const user = await getCurrentUser();
@@ -36,7 +36,7 @@ async function Upload({ locale, searchParams }: { locale: Locale; searchParams: 
       ) : null}
       {errorKey ? (
         <p role="alert" className="mt-4 rounded-md bg-butter p-3 text-sm font-semibold text-alert">
-          {t.upload[errorKey]}
+          {errorKey === "unavailable" ? t.common.unavailable : t.upload[errorKey]}
         </p>
       ) : null}
       <div className="mt-6 rounded-lg border border-line p-5 sm:p-7">

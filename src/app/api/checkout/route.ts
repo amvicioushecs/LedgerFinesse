@@ -16,7 +16,8 @@ export async function POST(request: NextRequest) {
 
   const user = await getCurrentUser();
   if (!user) return NextResponse.redirect(new URL(`/${locale}/signin`, request.url), 303);
-  if (await rateLimited(request, "checkout", user.id)) return back("?checkout=rate");
+  const limit = await rateLimited(request, "checkout", user.id);
+  if (limit !== "ok") return back(limit === "limited" ? "?checkout=rate" : "?checkout=unavailable");
 
   try {
     const result = await startCheckout(await checkoutDeps(), { userId: user.id, email: user.email }, auditId, locale);

@@ -300,5 +300,5 @@ export const es: Dictionary = {
     ctaTitle: "Revisa tu propio estado de cuenta",
     ctaBody: "Sube tu estado de cuenta y tu contrato. El escaneo es gratis; pagas 15% solo si te deben dinero.",
   },
-  common: { loading: "Cargando…", backHome: "← Volver al inicio", notFound: "Página no encontrada", sampleLabel: "EJEMPLO" },
+  common: { loading: "Cargando…", backHome: "← Volver al inicio", notFound: "Página no encontrada", sampleLabel: "EJEMPLO", unavailable: "Esto no está disponible por el momento. Inténtalo de nuevo en unos minutos." },
 };

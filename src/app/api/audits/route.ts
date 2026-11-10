@@ -15,8 +15,9 @@ export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.redirect(new URL(`/${locale}/signin?next=/${locale}/audits/new`, request.url), 303);
 
-  const refuse = (error: "rate" | "daily") => NextResponse.redirect(new URL(`/${locale}/audits/new?error=${error}`, request.url), 303);
-  if (await rateLimited(request, "upload", user.id)) return refuse("rate");
+  const refuse = (error: "rate" | "unavailable" | "daily") => NextResponse.redirect(new URL(`/${locale}/audits/new?error=${error}`, request.url), 303);
+  const limit = await rateLimited(request, "upload", user.id);
+  if (limit !== "ok") return refuse(limit === "limited" ? "rate" : "unavailable");
   const deps = await auditDeps();
   if (!(await canStartAudit(deps, user.id))) return refuse("daily");
 

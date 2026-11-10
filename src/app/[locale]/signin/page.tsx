@@ -38,9 +38,9 @@ async function SignInForm({ locale, searchParams }: { locale: Locale; searchPara
           <span className="text-sm font-semibold">{t.signup.emailLabel}</span>
           <input type="email" name="email" required maxLength={320} autoComplete="email" inputMode="email" placeholder={t.signup.emailPlaceholder} className={inputClass} />
         </label>
-        {status === "error" || status === "rate" ? (
+        {status === "error" || status === "rate" || status === "unavailable" ? (
           <p role="alert" className="text-sm font-semibold text-alert">
-            {status === "rate" ? t.signup.rateLimited : t.signup.error}
+            {status === "rate" ? t.signup.rateLimited : status === "unavailable" ? t.common.unavailable : t.signup.error}
           </p>
         ) : null}
         <button type="submit" className="btn btn-gold w-full" data-testid="signin-submit">

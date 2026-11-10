@@ -20,7 +20,7 @@ import type { Locale } from "@/lib/i18n/locales";
 import { MOCK_WEBHOOK_SECRET, MockCheckoutGateway, MockRefundGateway, mockStripe } from "@/lib/payments/mock-gateway";
 import { createStripeClient, StripeCheckoutGateway, StripeRefundGateway } from "@/lib/payments/stripe-gateway";
 import type { CheckoutGateway, RefundGateway } from "@/lib/payments/types";
-import { MemoryRateLimitStore, clientIp, isRateLimited, passwordFailureGuard, type RateLimitStore, type RateLimitedAction } from "@/lib/rate-limit";
+import { MemoryRateLimitStore, checkRateLimit, clientIp, passwordFailureGuard, type RateLimitOutcome, type RateLimitStore, type RateLimitedAction } from "@/lib/rate-limit";
 import type Stripe from "stripe";
 
 export interface CurrentUser {
@@ -318,10 +318,10 @@ function rateLimitStore(env: ServerEnv): RateLimitStore {
   };
 }
 
-/** Fails closed (refuses the request) if the limiter is unreachable, except in development. */
-export function rateLimited(request: Request, action: RateLimitedAction, subject: string | null): Promise<boolean> {
+/** "unavailable" (request refused, "temporarily unavailable") if the limiter is unreachable, except in development. */
+export function rateLimited(request: Request, action: RateLimitedAction, subject: string | null): Promise<RateLimitOutcome> {
   const env = serverEnv();
-  return isRateLimited(
+  return checkRateLimit(
     { store: rateLimitStore(env), limits: env.rateLimits, ipLimit: env.ipRateLimit, failOpen: env.siteEnv === "development" },
     action,
     { ip: clientIp(request.headers, env.trustedIpHeader), subject },
