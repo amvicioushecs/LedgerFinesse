@@ -314,7 +314,7 @@ export class SupabaseAuditRepository implements AuditRepository {
       .from("payment_reviews")
       .select("id", { count: "exact", head: true })
       .eq("audit_id", auditId)
-      .is("refund_id", null);
+      .is("resolved_at", null);
     if (error) throw new Error(`has open review: ${error.message}`);
     return (count ?? 0) > 0;
   }

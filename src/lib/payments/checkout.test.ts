@@ -132,8 +132,16 @@ describe("startCheckout", () => {
   it("holds checkout while an unknown-session payment for the audit is in manual review", async () => {
     await repo.insertAudit(audit());
     repo.reviews.push({ eventId: "evt_u", reason: "unknown_session", auditId: "audit-1", checkoutSessionId: "cs_x", paymentIntentId: "pi_x",
-      amountCents: 9600, currency: "usd", refundId: null, refundAmountCents: null, refundedAt: null });
+      amountCents: 9600, currency: "usd", refundId: null, refundAmountCents: null, refundedAt: null, resolvedAt: null });
     expect(await startCheckout(deps(), { userId: "user-a", email: null }, "audit-1", "en")).toEqual({ kind: "no_checkout", reason: "under_review" });
+  });
+
+  it("a review a person resolved (resolved_at set, no refund) no longer blocks checkout", async () => {
+    await repo.insertAudit(audit());
+    repo.reviews.push({ eventId: "evt_u", reason: "unknown_session", auditId: "audit-1", checkoutSessionId: "cs_x", paymentIntentId: "pi_x",
+      amountCents: 9600, currency: "usd", refundId: null, refundAmountCents: null, refundedAt: null, resolvedAt: "2026-11-10T08:00:00Z" });
+    expect(await repo.hasOpenReview("audit-1")).toBe(false);
+    expect((await startCheckout(deps(), { userId: "user-a", email: null }, "audit-1", "en")).kind).toBe("redirect");
   });
 
   it("does not open checkout for clean, unlocked, foreign or tampered audits", async () => {

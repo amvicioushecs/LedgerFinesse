@@ -154,6 +154,7 @@ export class MemoryAuditRepository implements AuditRepository {
       refundId: null,
       refundAmountCents: null,
       refundedAt: null,
+      resolvedAt: null,
     });
     return outcome;
   }
@@ -163,7 +164,7 @@ export class MemoryAuditRepository implements AuditRepository {
   }
 
   async hasOpenReview(auditId: string) {
-    return this.reviews.some((r) => r.auditId === auditId && r.refundId === null);
+    return this.reviews.some((r) => r.auditId === auditId && r.resolvedAt === null);
   }
 
   private refundable(eventId: string) {
@@ -180,7 +181,8 @@ export class MemoryAuditRepository implements AuditRepository {
   async recordRefund(eventId: string, refundId: string, amountCents: number) {
     const review = this.refundable(eventId);
     if (!review) return false;
-    Object.assign(review, { refundId, refundAmountCents: amountCents, refundedAt: new Date().toISOString() });
+    const at = new Date().toISOString();
+    Object.assign(review, { refundId, refundAmountCents: amountCents, refundedAt: at, resolvedAt: at });
     const payment = this.payments.get(review.checkoutSessionId);
     if (payment) payment.status = "refunded";
     return true;

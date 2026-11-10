@@ -102,6 +102,8 @@ export interface PaymentReview {
   refundId: string | null;
   refundAmountCents: number | null;
   refundedAt: string | null;
+  /** Set by a refund or by a person closing the review; open reviews (null) hold checkout. */
+  resolvedAt: string | null;
 }
 
 /** Refunded automatically and in full (Hector, 2026-11-10). unknown_session stays with a person. */
