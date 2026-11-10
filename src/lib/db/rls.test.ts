@@ -26,7 +26,7 @@ async function as<T>(role: "anon" | "authenticated" | "service_role", userId: st
   }
 }
 
-const rows = async (sql: string, params: unknown[] = []) => (await db.query(sql, params)).rows;
+const rows = async (sql: string, params: unknown[] = []) => (await db.query<Record<string, unknown>>(sql, params)).rows;
 
 async function seed() {
   await db.exec(`
@@ -127,6 +127,44 @@ describe("apply_checkout_paid", () => {
 
   it("rejects a session that belongs to another audit", async () => {
     expect(await pay("evt_5", "cs_test_b", AUDIT_A, 1500)).toBe("unknown_session");
+  });
+});
+
+describe("save_scan_result", () => {
+  const AUDIT_C = "10000000-0000-4000-8000-00000000000c";
+  const result = (overrides: Record<string, unknown> = {}) => JSON.stringify({
+    status: "preview_ready", totalOwedCents: 15000, itemCount: 1, linesScanned: 3, feeCents: 2250, unlockedAt: null,
+    engineVersion: "test", extraction: { source: "demo", data: { ledger: [] } },
+    findings: [{ position: 0, category: "unauthorized_fee", description: "RUBS", firstDate: "2026-01-01", lastDate: "2026-10-01",
+      lineNumbers: [2, 5], chargedCents: 15000, allowedCents: 0, owedCents: 15000, basis: "lease", citation: null, sourceUrl: null,
+      leaseRef: "Lease § 11", lawNotes: [] }],
+    letters: [{ locale: "en", templateVersion: "v1", body: "Dear landlord" }],
+    ...overrides,
+  });
+
+  beforeEach(async () => {
+    await db.query(`insert into public.audits (id, user_id, status, jurisdiction_key) values ($1, $2, 'processing', 'san-diego-ca')`, [AUDIT_C, A]);
+  });
+
+  it("stores findings, letters and the summary in one call", async () => {
+    await as("service_role", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result()]));
+    const [audit] = await rows("select status, total_owed_cents, fee_cents from public.audits where id = $1", [AUDIT_C]);
+    expect(audit).toEqual({ status: "preview_ready", total_owed_cents: 15000, fee_cents: 2250 });
+    const [finding] = await rows("select line_numbers, lease_ref from public.findings where audit_id = $1", [AUDIT_C]);
+    expect(finding).toEqual({ line_numbers: [2, 5], lease_ref: "Lease § 11" });
+  });
+
+  it("rolls back when findings do not add up or the fee is not 15%", async () => {
+    await expect(as("service_role", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result({ totalOwedCents: 20000, feeCents: 3000 })])))
+      .rejects.toThrow(/do not add up/);
+    await expect(as("service_role", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result({ feeCents: 100 })])))
+      .rejects.toThrow(/audits_fee_is_15_percent/);
+    expect(await rows("select * from public.findings where audit_id = $1", [AUDIT_C])).toEqual([]);
+  });
+
+  it("refuses an audit that is not processing, and renters cannot call it", async () => {
+    await expect(as("service_role", null, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_A, result()]))).rejects.toThrow(/not processing/);
+    await expect(as("authenticated", A, () => rows("select public.save_scan_result($1, $2::jsonb)", [AUDIT_C, result()]))).rejects.toThrow(/permission denied/);
   });
 });
 

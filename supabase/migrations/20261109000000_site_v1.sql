@@ -39,6 +39,7 @@ create table public.audits (
   status             public.audit_status not null default 'draft',
   locale             text not null default 'en' check (locale in ('en', 'es')),
   jurisdiction_key   text not null check (jurisdiction_key in ('san-diego-ca', 'los-angeles-ca', 'austin-tx', 'new-york-ny')),
+  tenant_name        text check (char_length(tenant_name) <= 200),
   landlord_name      text check (char_length(landlord_name) <= 200),
   property_address   text check (char_length(property_address) <= 500),
   -- Free-scan summary: the only result columns a locked audit exposes.
@@ -200,6 +201,50 @@ begin
 end $$;
 revoke all on function public.apply_checkout_paid(text, text, text, uuid, bigint, text, text) from public, anon, authenticated;
 grant execute on function public.apply_checkout_paid(text, text, text, uuid, bigint, text, text) to service_role;
+
+-- ---------------------------------------------------------------- save scan (service role only)
+-- Stores the engine output in one transaction. Only a 'processing' audit can be completed.
+create or replace function public.save_scan_result(p_audit_id uuid, p_result jsonb)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  v_user uuid;
+begin
+  select user_id into v_user from public.audits where id = p_audit_id and status = 'processing' for update;
+  if v_user is null then raise exception 'audit % is not processing', p_audit_id; end if;
+
+  insert into public.extractions (audit_id, user_id, source, data)
+  values (p_audit_id, v_user, p_result #>> '{extraction,source}', p_result #> '{extraction,data}');
+
+  insert into public.findings (audit_id, user_id, position, category, description, first_date, last_date,
+    line_numbers, charged_cents, allowed_cents, owed_cents, basis, citation, source_url, lease_ref, law_notes)
+  select p_audit_id, v_user, (f ->> 'position')::int, f ->> 'category', f ->> 'description',
+    (f ->> 'firstDate')::date, (f ->> 'lastDate')::date,
+    array(select jsonb_array_elements_text(f -> 'lineNumbers')::int),
+    (f ->> 'chargedCents')::bigint, (f ->> 'allowedCents')::bigint, (f ->> 'owedCents')::bigint,
+    f ->> 'basis', f ->> 'citation', f ->> 'sourceUrl', f ->> 'leaseRef', coalesce(f -> 'lawNotes', '[]'::jsonb)
+  from jsonb_array_elements(p_result -> 'findings') as f;
+
+  insert into public.letters (audit_id, user_id, locale, template_version, body)
+  select p_audit_id, v_user, l ->> 'locale', l ->> 'templateVersion', l ->> 'body'
+  from jsonb_array_elements(p_result -> 'letters') as l;
+
+  update public.audits set
+    status = (p_result ->> 'status')::public.audit_status,
+    total_owed_cents = (p_result ->> 'totalOwedCents')::bigint,
+    item_count = (p_result ->> 'itemCount')::int,
+    lines_scanned = (p_result ->> 'linesScanned')::int,
+    fee_cents = (p_result ->> 'feeCents')::bigint,
+    unlocked_at = (p_result ->> 'unlockedAt')::timestamptz,
+    engine_version = p_result ->> 'engineVersion'
+  where id = p_audit_id;
+
+  if (select coalesce(sum(owed_cents), 0) from public.findings where audit_id = p_audit_id)
+     <> (p_result ->> 'totalOwedCents')::bigint then
+    raise exception 'findings do not add up to the audit total';
+  end if;
+end $$;
+revoke all on function public.save_scan_result(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.save_scan_result(uuid, jsonb) to service_role;
 
 -- ---------------------------------------------------------------- RLS and grants
 alter table public.profiles      enable row level security;
