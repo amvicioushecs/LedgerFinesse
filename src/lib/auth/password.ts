@@ -1,7 +1,7 @@
 import { safeNextPath } from "@/lib/auth/safe-next";
 import type { Locale } from "@/lib/i18n/locales";
 
-/** Supabase Auth's default minimum is 6; we ask for 8. bcrypt ignores bytes past 72. */
+/** Supabase Auth's default minimum is 6; we ask for 8 characters. bcrypt ignores bytes past 72, so the maximum is in UTF-8 bytes. */
 export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_MAX_LENGTH = 72;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -29,7 +29,9 @@ export type PasswordStatus = "error" | "weak" | "rate" | "locked" | "invalid" | 
 export type PasswordResult = { kind: "redirect"; to: string } | { kind: "back"; status: PasswordStatus; next: string };
 
 const validEmail = (email: string) => email.length <= 320 && EMAIL.test(email);
-const validPassword = (password: string) => password.length >= PASSWORD_MIN_LENGTH && password.length <= PASSWORD_MAX_LENGTH;
+const utf8 = new TextEncoder();
+const validPassword = (password: string) =>
+  [...password].length >= PASSWORD_MIN_LENGTH && utf8.encode(password).length <= PASSWORD_MAX_LENGTH;
 
 /** Supabase email links land on /auth/callback, which exchanges the code and continues to `next` (re-checked there). */
 function callbackUrl(appUrl: string, locale: Locale, next: string): string {

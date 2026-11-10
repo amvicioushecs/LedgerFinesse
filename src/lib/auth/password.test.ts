@@ -104,6 +104,17 @@ describe("passwordSignIn", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("measures the 72 limit in UTF-8 bytes (bcrypt's limit), not characters", async () => {
+    const { provider, calls } = fakeProvider();
+    const run = (password: string) =>
+      passwordSignIn({ provider, rateLimited: notLimited, passwordFailures: noFailures, appUrl: APP }, { ...base, password, intent: "signup", next: "" });
+    // 37 two-byte characters = 74 bytes: too long, though only 37 characters.
+    expect(await run("ñ".repeat(37))).toMatchObject({ kind: "back", status: "weak" });
+    // 18 four-byte emoji = 72 bytes: allowed.
+    expect(await run("🔑".repeat(18))).toMatchObject({ kind: "back", status: "confirm" });
+    expect(calls).toHaveLength(1);
+  });
+
   it("maps wrong credentials and unconfirmed accounts to their own statuses", async () => {
     for (const result of ["invalid", "unconfirmed", "error"] as const) {
       const { provider } = fakeProvider({ signIn: async () => result });
