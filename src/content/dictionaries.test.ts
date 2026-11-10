@@ -106,7 +106,13 @@ describe("Copy Desk final strings (PR #2)", () => {
       ["terms.refundsItems[1]", en.terms.refundsItems[1], "we can't unlock your audit after you pay, or"],
       ["terms.refundsItems[2]", en.terms.refundsItems[2], "you were charged more than once for the same audit."],
       ["terms.refundsUnrecognized", en.terms.refundsUnrecognized, 'If a payment comes from a checkout session we don\'t recognize, we don\'t refund it automatically. A person reviews it, and your account shows "Payment under review" until that\'s done.'],
-      ["terms.refundsRetry", en.terms.refundsRetry, 'Each payment is refunded no more than once. If a refund doesn\'t go through, we retry it. While a retry is pending, your account also shows "Payment under review."'],
+      ["terms.refundsRetry", en.terms.refundsRetry, 'Each payment is refunded no more than once. If a refund doesn\'t go through, we retry it. While a retry is pending, your account shows "Your refund is being processed."'],
+      // Round 2b
+      ["dashboard.tabs.letter", en.dashboard.tabs.letter, "2. Your Dispute Letter"],
+      ["dashboard.letterTitle", en.dashboard.letterTitle, "Rent Ledger Dispute & Refund Request Letter"],
+      ["pricing.paidPrice", en.pricing.paidPrice, "15%"],
+      ["pricing.paidNote", en.pricing.paidNote, "of amount owed, upfront ($0.50 min)"],
+      ["terms.title", en.terms.title, "Terms of Service"],
       ["terms.refundsRelock", en.terms.refundsRelock, "After we refund a payment that didn't match the fee, your report locks again. You can then pay the correct fee to unlock it."],
     ];
     for (const [path, actual, want] of expected) expect(actual, path).toBe(want);
@@ -161,7 +167,13 @@ describe("Copy Desk final strings (PR #2)", () => {
       ["terms.refundsItems[1]", es.terms.refundsItems[1], "no podemos desbloquear tu auditoría después de que pagas, o"],
       ["terms.refundsItems[2]", es.terms.refundsItems[2], "se te cobró más de una vez por la misma auditoría."],
       ["terms.refundsUnrecognized", es.terms.refundsUnrecognized, 'Si un pago viene de una sesión de pago que no reconocemos, no lo reembolsamos automáticamente. Una persona lo revisa, y tu cuenta muestra "Pago en revisión" hasta que termine.'],
-      ["terms.refundsRetry", es.terms.refundsRetry, 'Cada pago se reembolsa una sola vez como máximo. Si un reembolso no se completa, lo volvemos a intentar. Mientras haya un reintento pendiente, tu cuenta también muestra "Pago en revisión".'],
+      ["terms.refundsRetry", es.terms.refundsRetry, 'Cada pago se reembolsa una sola vez como máximo. Si un reembolso no se completa, lo volvemos a intentar. Mientras haya un reintento pendiente, tu cuenta muestra "Tu reembolso está en proceso".'],
+      // Round 2b
+      ["dashboard.tabs.letter", es.dashboard.tabs.letter, "2. Tu carta de disputa"],
+      ["dashboard.letterTitle", es.dashboard.letterTitle, "Carta de disputa del estado de cuenta y solicitud de reembolso"],
+      ["pricing.paidPrice", es.pricing.paidPrice, "15%"],
+      ["pricing.paidNote", es.pricing.paidNote, "de lo que te deben, por adelantado (mín. $0.50)"],
+      ["terms.title", es.terms.title, "Términos del servicio"],
       ["terms.refundsRelock", es.terms.refundsRelock, "Después de reembolsar un pago que no coincidía con la tarifa, tu reporte se bloquea de nuevo. Luego puedes pagar la tarifa correcta para desbloquearlo."],
     ];
     for (const [path, actual, want] of expectedEs) expect(actual, path).toBe(want);

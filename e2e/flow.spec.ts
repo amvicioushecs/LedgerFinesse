@@ -8,8 +8,8 @@ const SHOTS = process.env.SCREENSHOT_DIR ?? "/workspace/ledgerfinesse/screenshot
 mkdirSync(SHOTS, { recursive: true });
 
 const COPY = {
-  en: { found: "We found $640.00 owed back to you.", fee: "Upfront payment: $96.00 (15% of $640.00 owed).", pay: "Pay $96.00 & Unlock Dashboard", letter: "2. Formal Dispute & Demand Letter", tenDays: "ten (10) business days", notLawFirm: "not a law firm" },
-  es: { found: "Encontramos $640.00 que te deben.", fee: "", pay: "", letter: "2. Carta formal de disputa y reclamación", tenDays: "diez (10) días hábiles", notLawFirm: "no es un despacho de abogados" },
+  en: { found: "We found $640.00 owed back to you.", fee: "Upfront payment: $96.00 (15% of $640.00 owed).", pay: "Pay $96.00 & Unlock Dashboard", letter: "2. Your Dispute Letter", tenDays: "ten (10) business days", notLawFirm: "not a law firm" },
+  es: { found: "Encontramos $640.00 que te deben.", fee: "", pay: "", letter: "2. Tu carta de disputa", tenDays: "diez (10) días hábiles", notLawFirm: "no es un despacho de abogados" },
 } as const;
 
 async function shot(page: Page, name: string) {
