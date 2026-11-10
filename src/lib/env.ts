@@ -8,11 +8,13 @@ import { DEFAULT_IP_RATE_LIMIT, DEFAULT_PASSWORD_FAILURE_LIMIT, DEFAULT_RATE_LIM
 
 export interface ServerEnv {
   siteEnv: "development" | "preview" | "production";
-  backend: "memory" | "supabase";
+  backend: "memory" | "supabase" | "neon";
   stripeMode: "mock" | "stripe";
   extractionMode: "demo" | "gemini";
   appUrl: string;
   supabase: { url: string; anonKey: string; serviceRoleKey: string } | null;
+  /** LF_BACKEND=neon: Postgres (owner role, server only) and Managed Better Auth (server-side calls only). */
+  neon: { databaseUrl: string; authBaseUrl: string; cookieSecret: string } | null;
   stripe: { secretKey: string; webhookSecret: string } | null;
   gemini: { apiKey: string; model: string } | null;
   /** Signs local dev sessions (backend=memory, development only). Null everywhere else: no fallback secret. */
@@ -60,7 +62,7 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     errors.push("SITE_ENV is required in a production build (development, preview or production); it has no default there");
   }
   const siteEnv = pick(raw, "SITE_ENV", ["development", "preview", "production"] as const, "development", errors);
-  const backend = pick(raw, "LF_BACKEND", ["memory", "supabase"] as const, "memory", errors);
+  const backend = pick(raw, "LF_BACKEND", ["memory", "supabase", "neon"] as const, "memory", errors);
   const stripeMode = pick(raw, "STRIPE_MODE", ["mock", "stripe"] as const, "mock", errors);
   const extractionMode = pick(raw, "EXTRACTION_MODE", ["demo", "gemini"] as const, "demo", errors);
   const appUrl = (raw.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000").replace(/\/+$/, "");
@@ -84,6 +86,13 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     backend === "supabase"
       ? { url: need("NEXT_PUBLIC_SUPABASE_URL"), anonKey: need("NEXT_PUBLIC_SUPABASE_ANON_KEY"), serviceRoleKey: need("SUPABASE_SERVICE_ROLE_KEY") }
       : null;
+
+  let neon: ServerEnv["neon"] = null;
+  if (backend === "neon") {
+    neon = { databaseUrl: need("DATABASE_URL"), authBaseUrl: need("NEON_AUTH_BASE_URL"), cookieSecret: need("NEON_AUTH_COOKIE_SECRET") };
+    if (neon.authBaseUrl && !neon.authBaseUrl.startsWith("https://")) errors.push("NEON_AUTH_BASE_URL must be an https URL");
+    if (neon.cookieSecret && neon.cookieSecret.length < 32) errors.push("NEON_AUTH_COOKIE_SECRET must be at least 32 characters");
+  }
 
   let stripe: ServerEnv["stripe"] = null;
   if (stripeMode === "stripe") {
@@ -128,6 +137,7 @@ export function parseServerEnv(raw: Raw): ServerEnv {
     extractionMode,
     appUrl,
     supabase,
+    neon,
     stripe,
     gemini,
     devSessionSecret: siteEnv === "development" ? raw.DEV_SESSION_SECRET?.trim() || "local-dev-only-not-a-secret" : null,
