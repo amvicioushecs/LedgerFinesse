@@ -60,4 +60,38 @@ describe("StripeRefundGateway", () => {
     expect(calls[0].params).not.toHaveProperty("amount");
     expect(calls[0].options).toEqual({ idempotencyKey: "refund-pi_123" });
   });
+
+  describe("a retry after Stripe's idempotency window (~24h)", () => {
+    const already = Object.assign(new Error("Charge ch_1 has already been refunded."), { type: "StripeInvalidRequestError", code: "charge_already_refunded" });
+    const withRefunds = (list: Partial<Stripe.Refund>[], createError: Error = already) => {
+      const listed: unknown[] = [];
+      const stripe = {
+        refunds: {
+          create: async () => { throw createError; },
+          list: async (params: unknown) => (listed.push(params), { data: list, has_more: false }),
+        },
+      } as unknown as Stripe;
+      return { listed, gateway: new StripeRefundGateway(stripe) };
+    };
+
+    it("records the refund that already exists on the payment intent instead of failing forever", async () => {
+      const { listed, gateway } = withRefunds([
+        { id: "re_failed", amount: 9600, status: "failed" },
+        { id: "re_done", amount: 9600, status: "succeeded" },
+      ]);
+      expect(await gateway.refund("pi_123", "refund-pi_123", "amount_mismatch")).toEqual({ refundId: "re_done", amountCents: 9600 });
+      expect(listed).toEqual([{ payment_intent: "pi_123", limit: 100 }]);
+    });
+
+    it("still fails if Stripe says refunded but lists no live refund", async () => {
+      const { gateway } = withRefunds([{ id: "re_x", amount: 9600, status: "canceled" }]);
+      await expect(gateway.refund("pi_123", "refund-pi_123", "amount_mismatch")).rejects.toThrow(/already been refunded/);
+    });
+
+    it("other Stripe errors are not swallowed", async () => {
+      const { listed, gateway } = withRefunds([], Object.assign(new Error("boom"), { code: "api_error" }));
+      await expect(gateway.refund("pi_123", "refund-pi_123", "amount_mismatch")).rejects.toThrow("boom");
+      expect(listed).toHaveLength(0);
+    });
+  });
 });

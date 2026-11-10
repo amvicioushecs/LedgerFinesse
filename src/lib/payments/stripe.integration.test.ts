@@ -119,8 +119,10 @@ describe.skipIf(!enabled)("Stripe test API (real gateway)", () => {
     expect(first.amountCents).toBe(100);
     // Redelivery retries with the same key: Stripe returns the same refund instead of a second one.
     expect(await refunds.refund(pi.id, `refund-${pi.id}`, "amount_mismatch")).toEqual(first);
-    // Even with another key Stripe will not refund an already fully refunded charge.
-    await expect(refunds.refund(pi.id, `refund-${pi.id}-other`, "amount_mismatch")).rejects.toThrow(/refunded/i);
+    // Another key (what a retry looks like after Stripe's ~24h idempotency window): Stripe refuses a second
+    // refund (charge_already_refunded) and the gateway records the refund that already exists.
+    await expect(stripe.refunds.create({ payment_intent: pi.id }, { idempotencyKey: `refund-${pi.id}-raw` })).rejects.toMatchObject({ code: "charge_already_refunded" });
+    expect(await refunds.refund(pi.id, `refund-${pi.id}-after-window`, "amount_mismatch")).toEqual(first);
 
     const stored = await stripe.refunds.retrieve(first.refundId);
     expect(stored).toMatchObject({ payment_intent: pi.id, amount: 100, reason: "requested_by_customer", metadata: { ledgerfinesse_reason: "amount_mismatch" } });
