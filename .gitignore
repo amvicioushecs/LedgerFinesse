@@ -10,10 +10,10 @@
 next-env.d.ts
 *.tsbuildinfo
 
-# cloudflare / opennext
+# spacefast build output
 /.open-next/
-/.wrangler/
-.dev.vars*
+/.spacefast/*
+!/.spacefast/space.json
 
 # env files: never commit real values
 .env*
