@@ -1,4 +1,6 @@
-// Minimal stub. KV, Queues, cron triggers and secrets are added later.
+// Builds the OpenNext worker (`npm run build:cf`) and runs it locally (`wrangler dev`, e2e). The hosting target is
+// Spacefast Functions, which runs this prebuilt worker; nothing deploys from here. No Cloudflare bindings are used:
+// rate limits live in Supabase Postgres (src/lib/rate-limit.ts).
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ledgerfinesse-web",

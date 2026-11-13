@@ -1,1 +1,137 @@
 @import "tailwindcss";
+
+/* Palette and type from Hector's app (2026-11-09). */
+@theme {
+  --color-forest: #164b3b;
+  --color-forest-deep: #0f3b2f;
+  --color-ink: #17332a;
+  --color-gold: #e9a928;
+  --color-gold-deep: #c9850a;
+  --color-mint: #dce9e1;
+  --color-butter: #fff0c8;
+  --color-alert: #a63d2f;
+  --color-muted: #52625b;
+  --color-sage: #9cad9f;
+  --color-line: #cbd5ce;
+  --color-cream: #fbfaf6;
+  --font-display: var(--font-newsreader), Georgia, serif;
+  --font-sans: var(--font-plex), ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: #ffffff;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
+@layer components {
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.375rem;
+  padding: 0.75rem 1.25rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.2;
+  min-height: 44px;
+  transition: background-color 120ms ease, transform 120ms ease;
+}
+.btn-gold {
+  background: var(--color-gold);
+  color: var(--color-ink);
+  box-shadow: 0 3px 0 var(--color-gold-deep);
+}
+.btn-gold:hover {
+  background: #f0b53a;
+}
+.btn-forest {
+  background: var(--color-forest);
+  color: #fff;
+}
+.btn-forest:hover {
+  background: var(--color-forest-deep);
+}
+.btn-outline {
+  border: 1.5px solid var(--color-ink);
+  color: var(--color-ink);
+  background: #fff;
+}
+.btn-outline:hover {
+  background: var(--color-mint);
+}
+.btn[aria-disabled="true"],
+.btn:disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.tap-target {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding-inline: 12px;
+}
+.tap-target:focus-visible {
+  outline: 2px solid var(--color-forest);
+  outline-offset: 2px;
+}
+header .tap-target {
+  margin-block: -12px;
+  /* Don't add extra inline padding in the tight header row; min 44px still applies. */
+  padding-inline: 0;
+}
+header [data-testid="language-switcher"] .tap-target {
+  padding-inline: 12px;
+}
+
+/* Standalone markdown/source links that are not running text (Design Desk 44px hit area). */
+.markdown-body p:has(> a:only-child) a,
+.markdown-body p:has(> strong:only-child) a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding-inline: 12px;
+}
+.markdown-body p:has(> a:only-child) a:focus-visible,
+.markdown-body p:has(> strong:only-child) a:focus-visible {
+  outline: 2px solid var(--color-forest);
+  outline-offset: 2px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
