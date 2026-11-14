@@ -13,27 +13,23 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "build:cf": "opennextjs-cloudflare build",
-    "preview:cf": "opennextjs-cloudflare build && opennextjs-cloudflare preview"
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@opennextjs/cloudflare": "1.20.13",
-    "next": "16.4.3",
+    "next": "16.3.8",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
   "devDependencies": {
-    "@tailwindcss/turbopack": "^4.3.3",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "5.0.5",
     "eslint": "^9",
-    "eslint-config-next": "16.4.3",
+    "eslint-config-next": "16.3.8",
     "tailwindcss": "^4.3.3",
     "typescript": "^5",
-    "vitest": "5.0.5",
-    "wrangler": "4.152.0"
+    "vitest": "5.0.5"
   }
 }

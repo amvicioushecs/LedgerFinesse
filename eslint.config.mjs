@@ -14,7 +14,7 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // LedgerFinesse: build output and the frozen prototype.
     ".open-next/**",
-    ".wrangler/**",
+    ".spacefast/**",
     "coverage/**",
     "reference/**",
   ]),
